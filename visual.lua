@@ -1650,7 +1650,7 @@ function Visual.makeSlider(pageIndex, text, key, minVal, maxVal, step, CFG, C, a
             local width = track.AbsoluteSize.X
             if width > 0 then
                 setValue(minVal + math.clamp((input.Position.X - track.AbsolutePosition.X) / width, 0, 1) * (maxVal - minVal))
-                Visual.PlaySound("Click", 0.15, 1)
+                Visual.playSound(SoundIDs.ButtonClick, 0.15, 1)
             end
         end
     end))
@@ -2073,5 +2073,4 @@ function Visual.destroy()
         screenGui:Destroy()
     end)
 end
-
 return Visual
