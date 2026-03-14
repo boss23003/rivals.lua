@@ -4,8 +4,8 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
-local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
+
 local LocalPlayer = Players.LocalPlayer
 
 local BASE_W = 1920
@@ -73,6 +73,7 @@ function Visual.PlaySound(name, volume, speed)
     if not id then
         return
     end
+
     local sound = Instance.new("Sound")
     sound.SoundId = id
     sound.Volume = volume or 0.35
@@ -80,6 +81,7 @@ function Visual.PlaySound(name, volume, speed)
     sound.RollOffMaxDistance = 0
     sound.Parent = SoundService
     sound:Play()
+
     sound.Ended:Connect(function()
         pcall(function()
             sound:Destroy()
@@ -755,15 +757,27 @@ function Visual.updateActiveBinds(CFG, C, aimActive, targetActive, spinActive, r
     end
 
     add("Aimbot", CFG.Enabled, CFG.AimKey)
-    if aimActive then add("Locking", true, CFG.AimKey) end
-    if targetActive then add("Target", true, CFG.TargetKey) end
-    if spinActive then add("Spin", true, CFG.AimKey) end
+    if aimActive then
+        add("Locking", true, CFG.AimKey)
+    end
+    if targetActive then
+        add("Target", true, CFG.TargetKey)
+    end
+    if spinActive then
+        add("Spin", true, CFG.AimKey)
+    end
     add("Trigger", CFG.Triggerbot, "")
     add("ESP", CFG.ShowESP, "")
     add("Dash", CFG.DashEnabled, CFG.DashKey)
-    if rageMode then add("Rage", true, "") end
-    if CFG.RageDash then add("R.Dash", true, "") end
-    if CFG.RageTarget then add("R.Target", true, "") end
+    if rageMode then
+        add("Rage", true, "")
+    end
+    if CFG.RageDash then
+        add("R.Dash", true, "")
+    end
+    if CFG.RageTarget then
+        add("R.Target", true, "")
+    end
 
     local baseOrder = 1000
     for index, item in ipairs(items) do
@@ -1394,505 +1408,6 @@ Visual.tBs = tabButtons
 Visual.refreshTabs = refreshTabButtons
 refreshTabButtons()
 
-function Visual.makeSection(pageIndex, text, C)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, -4, 0, 24)
-    frame.BackgroundTransparency = 1
-    frame.LayoutOrder = nextOrder(pageIndex)
-    frame.ZIndex = 18
-    frame.Parent = tabPages[pageIndex]
-
-    local label = Instance.new("TextLabel")
-    label.Text = string.upper(text)
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.TextSize = 10
-    label.Font = Enum.Font.GothamBold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.ZIndex = 20
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.Parent = frame
-
-    local labelGrad = Instance.new("UIGradient")
-    labelGrad.Color = Visual.getAuroraSequence(os.clock() + pageOrders[pageIndex] * 0.2)
-    labelGrad.Parent = label
-
-    local line = Instance.new("Frame")
-    line.Size = UDim2.new(1, 0, 0, 1)
-    line.Position = UDim2.new(0, 0, 1, -1)
-    line.BackgroundColor3 = Color3.new(1, 1, 1)
-    line.BackgroundTransparency = 0.4
-    line.BorderSizePixel = 0
-    line.ZIndex = 20
-    line.Parent = frame
-
-    local lineGrad = Instance.new("UIGradient")
-    lineGrad.Color = Visual.getAuroraSequence(os.clock())
-    lineGrad.Parent = line
-
-    table.insert(Visual.themeCallbacks, function()
-        labelGrad.Color = Visual.getAuroraSequence(os.clock() + pageOrders[pageIndex] * 0.2)
-        lineGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeToggle(pageIndex, text, key, CFG, C, callback)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 34)
-    row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.12
-    row.BorderSizePixel = 0
-    row.ZIndex = 18
-    row.LayoutOrder = nextOrder(pageIndex)
-    row.ClipsDescendants = true
-    row.Parent = tabPages[pageIndex]
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-
-    local rowGrad = Instance.new("UIGradient")
-    rowGrad.Color = Visual.getAuroraSequence(os.clock())
-    rowGrad.Rotation = 16
-    rowGrad.Parent = row
-
-    local title = Instance.new("TextLabel")
-    title.Text = text
-    title.Size = UDim2.new(1, -56, 1, 0)
-    title.Position = UDim2.new(0, 12, 0, 0)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.new(1, 1, 1)
-    title.TextSize = 11
-    title.Font = Enum.Font.GothamSemibold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 20
-    title.Parent = row
-    local titleGrad = Instance.new("UIGradient")
-    titleGrad.Color = Visual.getAuroraSequence(os.clock())
-    titleGrad.Parent = title
-
-    local pill = Instance.new("Frame")
-    pill.Size = UDim2.new(0, 38, 0, 18)
-    pill.Position = UDim2.new(1, -46, 0.5, -9)
-    pill.BackgroundColor3 = Color3.new(1, 1, 1)
-    pill.BackgroundTransparency = CFG[key] and 0.05 or 0.45
-    pill.BorderSizePixel = 0
-    pill.ZIndex = 20
-    pill.Parent = row
-    Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
-    local pillGrad = Instance.new("UIGradient")
-    pillGrad.Color = Visual.getAuroraSequence(os.clock())
-    pillGrad.Parent = pill
-
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 12, 0, 12)
-    knob.Position = CFG[key] and UDim2.new(1, -15, 0.5, -6) or UDim2.new(0, 3, 0.5, -6)
-    knob.BackgroundColor3 = Color3.new(1, 1, 1)
-    knob.BorderSizePixel = 0
-    knob.ZIndex = 21
-    knob.Parent = pill
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-
-    row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.04}):Play()
-    end)
-    row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.12}):Play()
-    end)
-
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.BackgroundTransparency = 1
-    button.Text = ""
-    button.ZIndex = 22
-    button.AutoButtonColor = false
-    button.Parent = row
-    bindClick(button, "Toggle")
-
-    button.MouseButton1Click:Connect(function()
-        CFG[key] = not CFG[key]
-        local state = CFG[key]
-        local mouse = UserInputService:GetMouseLocation()
-        Visual.Ripple(row, mouse.X - row.AbsolutePosition.X, mouse.Y - row.AbsolutePosition.Y)
-        TweenService:Create(pill, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-            BackgroundTransparency = state and 0.05 or 0.45
-        }):Play()
-        TweenService:Create(knob, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-            Position = state and UDim2.new(1, -15, 0.5, -6) or UDim2.new(0, 3, 0.5, -6)
-        }):Play()
-        if callback then
-            callback(state)
-        end
-    end)
-
-    table.insert(Visual.themeCallbacks, function()
-        rowGrad.Color = Visual.getAuroraSequence(os.clock())
-        pillGrad.Color = Visual.getAuroraSequence(os.clock())
-        titleGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeSlider(pageIndex, text, key, minVal, maxVal, step, CFG, C, allConnections)
-    allConnections = allConnections or {}
-
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 40)
-    row.BackgroundTransparency = 1
-    row.ZIndex = 18
-    row.LayoutOrder = nextOrder(pageIndex)
-    row.Parent = tabPages[pageIndex]
-
-    local title = Instance.new("TextLabel")
-    title.Text = text
-    title.Size = UDim2.new(0.55, 0, 0, 14)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.new(1, 1, 1)
-    title.TextSize = 10
-    title.Font = Enum.Font.Gotham
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 20
-    title.Parent = row
-    local titleGrad = Instance.new("UIGradient")
-    titleGrad.Color = Visual.getAuroraSequence(os.clock())
-    titleGrad.Parent = title
-
-    local valueLabel = Instance.new("TextLabel")
-    valueLabel.Text = step < 1 and string.format("%.2f", CFG[key]) or tostring(math.floor(CFG[key]))
-    valueLabel.Size = UDim2.new(0.43, 0, 0, 14)
-    valueLabel.Position = UDim2.new(0.55, 0, 0, 0)
-    valueLabel.BackgroundTransparency = 1
-    valueLabel.TextColor3 = Color3.new(1, 1, 1)
-    valueLabel.TextSize = 11
-    valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    valueLabel.ZIndex = 20
-    valueLabel.Parent = row
-    local valueGrad = Instance.new("UIGradient")
-    valueGrad.Color = Visual.getAuroraSequence(os.clock())
-    valueGrad.Parent = valueLabel
-
-    local track = Instance.new("Frame")
-    track.Size = UDim2.new(1, 0, 0, 5)
-    track.Position = UDim2.new(0, 0, 0, 22)
-    track.BackgroundColor3 = Color3.new(1, 1, 1)
-    track.BackgroundTransparency = 0.55
-    track.BorderSizePixel = 0
-    track.ZIndex = 20
-    track.Parent = row
-    Instance.new("UICorner", track).CornerRadius = UDim.new(0, 3)
-    local trackGrad = Instance.new("UIGradient")
-    trackGrad.Color = Visual.getAuroraSequence(os.clock())
-    trackGrad.Parent = track
-
-    local percent = math.clamp((CFG[key] - minVal) / (maxVal - minVal), 0, 1)
-
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(percent, 0, 1, 0)
-    fill.BackgroundColor3 = Color3.new(1, 1, 1)
-    fill.BorderSizePixel = 0
-    fill.ZIndex = 21
-    fill.Parent = track
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 3)
-    local fillGrad = Instance.new("UIGradient")
-    fillGrad.Color = Visual.getAuroraSequence(os.clock())
-    fillGrad.Parent = fill
-
-    local knob = Instance.new("TextButton")
-    knob.Size = UDim2.new(0, 14, 0, 14)
-    knob.AnchorPoint = Vector2.new(0.5, 0.5)
-    knob.Position = UDim2.new(percent, 0, 0.5, 0)
-    knob.BackgroundColor3 = Color3.new(1, 1, 1)
-    knob.Text = ""
-    knob.AutoButtonColor = false
-    knob.BorderSizePixel = 0
-    knob.ZIndex = 23
-    knob.Parent = track
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-    local knobGrad = Instance.new("UIGradient")
-    knobGrad.Color = Visual.getAuroraSequence(os.clock())
-    knobGrad.Parent = knob
-
-    local dragging = false
-
-    local function setValue(v)
-        if step > 0 then
-            v = math.floor(v / step + 0.5) * step
-        end
-        v = math.clamp(v, minVal, maxVal)
-        CFG[key] = v
-        local p = math.clamp((v - minVal) / (maxVal - minVal), 0, 1)
-        fill.Size = UDim2.new(p, 0, 1, 0)
-        knob.Position = UDim2.new(p, 0, 0.5, 0)
-        valueLabel.Text = step < 1 and string.format("%.2f", v) or tostring(math.floor(v))
-    end
-
-    knob.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            Visual.PlaySound("Click", 0.15, 1.05)
-        end
-    end)
-
-    table.insert(allConnections, UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end))
-
-    table.insert(allConnections, UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local width = track.AbsoluteSize.X
-            if width > 0 then
-                setValue(minVal + math.clamp((input.Position.X - track.AbsolutePosition.X) / width, 0, 1) * (maxVal - minVal))
-            end
-        end
-    end))
-
-    track.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local width = track.AbsoluteSize.X
-            if width > 0 then
-                setValue(minVal + math.clamp((input.Position.X - track.AbsolutePosition.X) / width, 0, 1) * (maxVal - minVal))
-                Visual.PlaySound("Click", 0.15, 1)
-            end
-        end
-    end)
-
-    table.insert(Visual.themeCallbacks, function()
-        titleGrad.Color = Visual.getAuroraSequence(os.clock())
-        valueGrad.Color = Visual.getAuroraSequence(os.clock())
-        trackGrad.Color = Visual.getAuroraSequence(os.clock())
-        fillGrad.Color = Visual.getAuroraSequence(os.clock())
-        knobGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeCycle(pageIndex, text, options, key, CFG, C, callback)
-    local index = CFG[key] or 1
-
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 34)
-    row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.12
-    row.BorderSizePixel = 0
-    row.ZIndex = 18
-    row.LayoutOrder = nextOrder(pageIndex)
-    row.ClipsDescendants = true
-    row.Parent = tabPages[pageIndex]
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-    local rowGrad = Instance.new("UIGradient")
-    rowGrad.Color = Visual.getAuroraSequence(os.clock())
-    rowGrad.Parent = row
-
-    local leftLabel = Instance.new("TextLabel")
-    leftLabel.Text = text
-    leftLabel.Size = UDim2.new(0.5, 0, 1, 0)
-    leftLabel.Position = UDim2.new(0, 12, 0, 0)
-    leftLabel.BackgroundTransparency = 1
-    leftLabel.TextColor3 = Color3.new(1, 1, 1)
-    leftLabel.TextSize = 11
-    leftLabel.Font = Enum.Font.GothamSemibold
-    leftLabel.TextXAlignment = Enum.TextXAlignment.Left
-    leftLabel.ZIndex = 20
-    leftLabel.Parent = row
-    local leftGrad = Instance.new("UIGradient")
-    leftGrad.Color = Visual.getAuroraSequence(os.clock())
-    leftGrad.Parent = leftLabel
-
-    local rightLabel = Instance.new("TextLabel")
-    rightLabel.Text = tostring(options[index])
-    rightLabel.Size = UDim2.new(0.42, 0, 1, 0)
-    rightLabel.Position = UDim2.new(0.5, 0, 0, 0)
-    rightLabel.BackgroundTransparency = 1
-    rightLabel.TextColor3 = Color3.new(1, 1, 1)
-    rightLabel.TextSize = 11
-    rightLabel.Font = Enum.Font.GothamBold
-    rightLabel.TextXAlignment = Enum.TextXAlignment.Right
-    rightLabel.ZIndex = 20
-    rightLabel.Parent = row
-    local rightGrad = Instance.new("UIGradient")
-    rightGrad.Color = Visual.getAuroraSequence(os.clock())
-    rightGrad.Parent = rightLabel
-
-    row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.04}):Play()
-    end)
-    row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.12}):Play()
-    end)
-
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.BackgroundTransparency = 1
-    button.Text = ""
-    button.ZIndex = 22
-    button.AutoButtonColor = false
-    button.Parent = row
-    bindClick(button, "Click")
-
-    button.MouseButton1Click:Connect(function()
-        local mouse = UserInputService:GetMouseLocation()
-        Visual.Ripple(row, mouse.X - row.AbsolutePosition.X, mouse.Y - row.AbsolutePosition.Y)
-        index = index % #options + 1
-        CFG[key] = index
-        rightLabel.Text = tostring(options[index])
-        if callback then
-            callback(index)
-        end
-    end)
-
-    table.insert(Visual.themeCallbacks, function()
-        rowGrad.Color = Visual.getAuroraSequence(os.clock())
-        leftGrad.Color = Visual.getAuroraSequence(os.clock())
-        rightGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeRebind(pageIndex, labelText, cfgKey, CFG, C, allConnections)
-    allConnections = allConnections or {}
-
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 34)
-    row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.12
-    row.BorderSizePixel = 0
-    row.ZIndex = 18
-    row.LayoutOrder = nextOrder(pageIndex)
-    row.ClipsDescendants = true
-    row.Parent = tabPages[pageIndex]
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-    local rowGrad = Instance.new("UIGradient")
-    rowGrad.Color = Visual.getAuroraSequence(os.clock())
-    rowGrad.Parent = row
-
-    local leftLabel = Instance.new("TextLabel")
-    leftLabel.Text = labelText
-    leftLabel.Size = UDim2.new(0.5, 0, 1, 0)
-    leftLabel.Position = UDim2.new(0, 12, 0, 0)
-    leftLabel.BackgroundTransparency = 1
-    leftLabel.TextColor3 = Color3.new(1, 1, 1)
-    leftLabel.TextSize = 11
-    leftLabel.Font = Enum.Font.GothamSemibold
-    leftLabel.TextXAlignment = Enum.TextXAlignment.Left
-    leftLabel.ZIndex = 20
-    leftLabel.Parent = row
-    local leftGrad = Instance.new("UIGradient")
-    leftGrad.Color = Visual.getAuroraSequence(os.clock())
-    leftGrad.Parent = leftLabel
-
-    local valueLabel = Instance.new("TextLabel")
-    valueLabel.Text = "[ " .. tostring(CFG[cfgKey]) .. " ]"
-    valueLabel.Size = UDim2.new(0.44, 0, 1, 0)
-    valueLabel.Position = UDim2.new(0.5, 0, 0, 0)
-    valueLabel.BackgroundTransparency = 1
-    valueLabel.TextColor3 = Color3.new(1, 1, 1)
-    valueLabel.TextSize = 12
-    valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    valueLabel.ZIndex = 20
-    valueLabel.Parent = row
-    local valueGrad = Instance.new("UIGradient")
-    valueGrad.Color = Visual.getAuroraSequence(os.clock())
-    valueGrad.Parent = valueLabel
-
-    row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.04}):Play()
-    end)
-    row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.12}):Play()
-    end)
-
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.BackgroundTransparency = 1
-    button.Text = ""
-    button.ZIndex = 22
-    button.AutoButtonColor = false
-    button.Parent = row
-    bindClick(button, "Click")
-
-    button.MouseButton1Click:Connect(function()
-        Visual.Ripple(row, row.AbsoluteSize.X / 2, row.AbsoluteSize.Y / 2)
-        valueLabel.Text = "..."
-        local rebinding = true
-
-        local connection
-        connection = UserInputService.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                local name = input.KeyCode.Name
-                if name ~= "Unknown" then
-                    CFG[cfgKey] = name
-                    valueLabel.Text = "[ " .. name .. " ]"
-                    rebinding = false
-                    if connection then
-                        connection:Disconnect()
-                    end
-                end
-            end
-        end)
-
-        task.delay(5, function()
-            if rebinding then
-                rebinding = false
-                valueLabel.Text = "[ " .. tostring(CFG[cfgKey]) .. " ]"
-                if connection then
-                    connection:Disconnect()
-                end
-            end
-        end)
-    end)
-
-    table.insert(Visual.themeCallbacks, function()
-        rowGrad.Color = Visual.getAuroraSequence(os.clock())
-        leftGrad.Color = Visual.getAuroraSequence(os.clock())
-        valueGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeInfo(pageIndex, text, C)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -4, 0, 14)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.TextSize = 9
-    label.Font = Enum.Font.Code
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.ZIndex = 20
-    label.LayoutOrder = nextOrder(pageIndex)
-    label.Parent = tabPages[pageIndex]
-    local grad = Instance.new("UIGradient")
-    grad.Color = Visual.getAuroraSequence(os.clock())
-    grad.Parent = label
-    table.insert(Visual.themeCallbacks, function()
-        grad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeLabel(pageIndex, C)
-    local label = Instance.new("TextLabel")
-    label.Text = ""
-    label.Size = UDim2.new(1, -8, 0, 16)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.TextSize = 12
-    label.Font = Enum.Font.GothamBold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.ZIndex = 20
-    label.LayoutOrder = nextOrder(pageIndex)
-    label.Parent = tabPages[pageIndex]
-    local grad = Instance.new("UIGradient")
-    grad.Color = Visual.getAuroraSequence(os.clock())
-    grad.Parent = label
-    table.insert(Visual.themeCallbacks, function()
-        grad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-    return label
-end
-
-local menuOpen = false
-Visual.isOpen = false
-Visual.isRageMode = false
-local savedMouseBehavior = nil
-local savedMouseIconEnabled = nil
-
 function Visual.openMenu(CFG)
     menuOpen = true
     Visual.isOpen = true
@@ -1968,6 +1483,28 @@ function Visual.closeMenu(CFG)
     end)
 end
 
+function Visual.handleDrag(inputPos)
+    if Visual._dragState.drag and Visual._dragState.start and Visual._dragState.pos then
+        local delta = inputPos - Visual._dragState.start
+        mainWindow.Position = UDim2.new(
+            Visual._dragState.pos.X.Scale,
+            Visual._dragState.pos.X.Offset + delta.X,
+            Visual._dragState.pos.Y.Scale,
+            Visual._dragState.pos.Y.Offset + delta.Y
+        )
+    end
+
+    if Visual._bfDrag.drag and Visual._bfDrag.start and Visual._bfDrag.pos then
+        local delta = inputPos - Visual._bfDrag.start
+        bindsFrame.Position = UDim2.new(
+            Visual._bfDrag.pos.X.Scale,
+            Visual._bfDrag.pos.X.Offset + delta.X,
+            Visual._bfDrag.pos.Y.Scale,
+            Visual._bfDrag.pos.Y.Offset + delta.Y
+        )
+    end
+end
+
 local themeTimer = 0
 
 function Visual.updateAnimations(dt, globalT)
@@ -2040,28 +1577,6 @@ function Visual.updateAnimations(dt, globalT)
     )
 end
 
-function Visual.handleDrag(inputPos)
-    if Visual._dragState.drag and Visual._dragState.start and Visual._dragState.pos then
-        local delta = inputPos - Visual._dragState.start
-        mainWindow.Position = UDim2.new(
-            Visual._dragState.pos.X.Scale,
-            Visual._dragState.pos.X.Offset + delta.X,
-            Visual._dragState.pos.Y.Scale,
-            Visual._dragState.pos.Y.Offset + delta.Y
-        )
-    end
-
-    if Visual._bfDrag.drag and Visual._bfDrag.start and Visual._bfDrag.pos then
-        local delta = inputPos - Visual._bfDrag.start
-        bindsFrame.Position = UDim2.new(
-            Visual._bfDrag.pos.X.Scale,
-            Visual._bfDrag.pos.X.Offset + delta.X,
-            Visual._bfDrag.pos.Y.Scale,
-            Visual._bfDrag.pos.Y.Offset + delta.Y
-        )
-    end
-end
-
 function Visual.destroy()
     pcall(function()
         blurMain:Destroy()
@@ -2073,4 +1588,5 @@ function Visual.destroy()
         screenGui:Destroy()
     end)
 end
+
 return Visual
