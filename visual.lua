@@ -1,16 +1,63 @@
+--[[
+    MOON v3.0 — VISUAL MODULE (FULL REWRITE)
+    Aurora gradient EVERYWHERE, rage rebuild, spin integration,
+    chams, animated binds, SVG moon, fullscreen aurora overlay
+]]
+
 local Visual = {}
 
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
+local TS = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
-local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
-local LocalPlayer = Players.LocalPlayer
-
+local LP = Players.LocalPlayer
 local BASE_W = 1920
 local BASE_H = 1080
 
+-- =============================================
+--          SOUND SYSTEM
+-- =============================================
+local SoundIDs = {
+    ButtonClick = "rbxassetid://6895079853",
+    ToggleOn = "rbxassetid://6895079981",
+    ToggleOff = "rbxassetid://6895079903",
+    TabSwitch = "rbxassetid://6895079761",
+    MenuOpen = "rbxassetid://6895079527",
+    MenuClose = "rbxassetid://6895079613",
+    Kill = "rbxassetid://6895079440",
+    Notify = "rbxassetid://6895079685",
+    BindActivate = "rbxassetid://6895079853",
+}
+
+local soundCache = {}
+function Visual.playSound(id, volume, pitch)
+    if not id then return end
+    volume = volume or 0.3
+    pitch = pitch or 1
+    task.spawn(function()
+        pcall(function()
+            local cached = soundCache[id]
+            if cached and cached.Parent then
+                cached.Volume = volume
+                cached.PlaybackSpeed = pitch
+                cached:Play()
+                return
+            end
+            local s = Instance.new("Sound")
+            s.SoundId = id
+            s.Volume = volume
+            s.PlaybackSpeed = pitch
+            s.Parent = SoundService
+            soundCache[id] = s
+            s:Play()
+        end)
+    end)
+end
+
+-- =============================================
+--          AURORA COLOR SYSTEM
+-- =============================================
 local auroraColors = {
     Color3.fromRGB(120, 40, 220),
     Color3.fromRGB(60, 120, 255),
@@ -19,30 +66,14 @@ local auroraColors = {
     Color3.fromRGB(180, 60, 220),
     Color3.fromRGB(60, 180, 255),
 }
-
-local function safeParent(guiObject)
-    local ok = false
-    if gethui then
-        ok = pcall(function()
-            guiObject.Parent = gethui()
-        end)
-    end
-    if not ok then
-        pcall(function()
-            guiObject.Parent = game.CoreGui
-        end)
-    end
-    if not guiObject.Parent then
-        guiObject.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    end
-end
+local auroraCount = #auroraColors
 
 function Visual.getAuroraColor(t, offset)
     offset = offset or 0
     local speed = 0.35
-    local idx = ((t * speed + offset) % #auroraColors)
-    local i1 = math.floor(idx) % #auroraColors + 1
-    local i2 = (i1 % #auroraColors) + 1
+    local idx = ((t * speed + offset) % auroraCount)
+    local i1 = math.floor(idx) % auroraCount + 1
+    local i2 = (i1 % auroraCount) + 1
     local frac = idx - math.floor(idx)
     return auroraColors[i1]:Lerp(auroraColors[i2], frac)
 end
@@ -57,454 +88,571 @@ function Visual.getAuroraSequence(t)
     })
 end
 
-Visual.SoundIds = {
-    Click = "rbxassetid://6895079853",
-    Toggle = "rbxassetid://6895079483",
-    Open = "rbxassetid://6895078171",
-    Close = "rbxassetid://6895078747",
-    Notify = "rbxassetid://6895079011",
-    Kill = "rbxassetid://6895080427",
-    Tab = "rbxassetid://6895079749",
-    Rage = "rbxassetid://6895080955",
-}
-
-function Visual.PlaySound(name, volume, speed)
-    local id = Visual.SoundIds[name]
-    if not id then
-        return
-    end
-    local sound = Instance.new("Sound")
-    sound.SoundId = id
-    sound.Volume = volume or 0.35
-    sound.PlaybackSpeed = speed or 1
-    sound.RollOffMaxDistance = 0
-    sound.Parent = SoundService
-    sound:Play()
-    sound.Ended:Connect(function()
-        pcall(function()
-            sound:Destroy()
-        end)
-    end)
-end
-
-for _, guiName in ipairs({
-    "MoonOverlay",
-    "MoonLoad",
-    "MoonGUI_Main",
-    "MoonGUI",
-    "SakuraGUI_v18",
-    "SakuraGUI_v19",
-    "SakuraGUI_v20",
-    "SakuraGUI"
-}) do
-    pcall(function()
-        if game.CoreGui:FindFirstChild(guiName) then
-            game.CoreGui[guiName]:Destroy()
-        end
-    end)
-    pcall(function()
-        if gethui and gethui():FindFirstChild(guiName) then
-            gethui()[guiName]:Destroy()
-        end
-    end)
-end
-
-for _, child in ipairs(Lighting:GetChildren()) do
-    if child.Name:find("MoonBlur") or child.Name:find("MoonLoadBlur") or child.Name:find("SakuraMainBlur") then
-        pcall(function()
-            child:Destroy()
-        end)
-    end
-end
-
+-- =============================================
+--          SCREEN GUI SETUP
+-- =============================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MoonOverlay"
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 99999
 screenGui.IgnoreGuiInset = true
-safeParent(screenGui)
+local parentOk = false
+if gethui then parentOk = pcall(function() screenGui.Parent = gethui() end) end
+if not parentOk then pcall(function() screenGui.Parent = game.CoreGui end) end
+if not screenGui.Parent then screenGui.Parent = LP.PlayerGui end
 Visual.screenGui = screenGui
 
-local scaleCache = 1
-local scaleTime = 0
-
+-- =============================================
+--          SCALING
+-- =============================================
+local _sc, _scT = 1, 0
 function Visual.getScale()
-    if os.clock() - scaleTime < 0.35 then
-        return scaleCache
-    end
+    if os.clock() - _scT < 0.5 then return _sc end
     local cam = workspace.CurrentCamera
     if cam then
-        scaleCache = math.clamp(math.min(cam.ViewportSize.X / BASE_W, cam.ViewportSize.Y / BASE_H), 0.4, 4)
+        _sc = math.clamp(math.min(cam.ViewportSize.X / BASE_W, cam.ViewportSize.Y / BASE_H), 0.4, 4)
     end
-    scaleTime = os.clock()
-    return scaleCache
+    _scT = os.clock()
+    return _sc
 end
-
-function Visual.S(v)
-    return v * Visual.getScale()
-end
-
+function Visual.S(v) return v * Visual.getScale() end
 function Visual.getVP()
     local cam = workspace.CurrentCamera
-    return cam and cam.ViewportSize or Vector2.new(BASE_W, BASE_H)
+    return cam and cam.ViewportSize or Vector2.new(1920, 1080)
 end
-
 function Visual.getCenter()
     local vp = Visual.getVP()
     return vp.X * 0.5, vp.Y * 0.5
 end
 
-function Visual.Ripple(button, x, y)
-    if not button or not button.Parent then
-        return
-    end
-    local ripple = Instance.new("Frame")
-    ripple.BackgroundColor3 = Color3.new(1, 1, 1)
-    ripple.BackgroundTransparency = 0.35
-    ripple.BorderSizePixel = 0
-    ripple.ZIndex = (button.ZIndex or 1) + 5
-    ripple.AnchorPoint = Vector2.new(0.5, 0.5)
-    ripple.Position = UDim2.new(0, x or 0, 0, y or 0)
-    ripple.Size = UDim2.new(0, 0, 0, 0)
-    ripple.Parent = button
-    Instance.new("UICorner", ripple).CornerRadius = UDim.new(1, 0)
+-- =============================================
+--          FULLSCREEN AURORA OVERLAY
+-- =============================================
+local fullscreenOverlay = Instance.new("Frame", screenGui)
+fullscreenOverlay.Name = "FullscreenAurora"
+fullscreenOverlay.Size = UDim2.new(1, 0, 1, 0)
+fullscreenOverlay.Position = UDim2.new(0, 0, 0, 0)
+fullscreenOverlay.BackgroundColor3 = Color3.new(1, 1, 1)
+fullscreenOverlay.BackgroundTransparency = 1
+fullscreenOverlay.BorderSizePixel = 0
+fullscreenOverlay.ZIndex = 7
+fullscreenOverlay.Visible = false
+local fullscreenGrad = Instance.new("UIGradient", fullscreenOverlay)
+fullscreenGrad.Rotation = 25
+Visual._fullscreenOverlay = fullscreenOverlay
+Visual._fullscreenGrad = fullscreenGrad
 
-    local grad = Instance.new("UIGradient")
-    grad.Color = Visual.getAuroraSequence(os.clock())
-    grad.Rotation = math.random(0, 360)
-    grad.Parent = ripple
+-- =============================================
+--          MOON SVG ANIMATION (TOP RIGHT)
+-- =============================================
+local moonSvgFrame = Instance.new("Frame", screenGui)
+moonSvgFrame.Name = "MoonSVG"
+moonSvgFrame.Size = UDim2.new(0, 120, 0, 120)
+moonSvgFrame.Position = UDim2.new(1, -140, 0, 20)
+moonSvgFrame.BackgroundTransparency = 1
+moonSvgFrame.BorderSizePixel = 0
+moonSvgFrame.ZIndex = 9999
+moonSvgFrame.Visible = false
 
-    local maxSize = math.max(button.AbsoluteSize.X, button.AbsoluteSize.Y) * 2.4
-    local tween = TweenService:Create(ripple, TweenInfo.new(0.55, Enum.EasingStyle.Quint), {
-        Size = UDim2.new(0, maxSize, 0, maxSize),
-        BackgroundTransparency = 1
-    })
-    tween:Play()
-    tween.Completed:Connect(function()
-        pcall(function()
-            ripple:Destroy()
-        end)
-    end)
+local moonOuter = Instance.new("Frame", moonSvgFrame)
+moonOuter.Size = UDim2.new(0, 80, 0, 80)
+moonOuter.Position = UDim2.new(0.5, -40, 0.5, -40)
+moonOuter.BackgroundColor3 = Color3.new(1, 1, 1)
+moonOuter.BackgroundTransparency = 0.7
+moonOuter.BorderSizePixel = 0
+moonOuter.ZIndex = 9999
+Instance.new("UICorner", moonOuter).CornerRadius = UDim.new(1, 0)
+local moonOuterGrad = Instance.new("UIGradient", moonOuter)
+Visual._moonOuterGrad = moonOuterGrad
+local moonOuterStroke = Instance.new("UIStroke", moonOuter)
+moonOuterStroke.Thickness = 2
+moonOuterStroke.Transparency = 0.3
+local moonOuterStrokeGrad = Instance.new("UIGradient", moonOuterStroke)
+Visual._moonOuterStrokeGrad = moonOuterStrokeGrad
+
+local moonCrescent = Instance.new("Frame", moonOuter)
+moonCrescent.Size = UDim2.new(0, 55, 0, 55)
+moonCrescent.Position = UDim2.new(0, 18, 0, -5)
+moonCrescent.BackgroundColor3 = Color3.fromRGB(4, 2, 10)
+moonCrescent.BackgroundTransparency = 0
+moonCrescent.BorderSizePixel = 0
+moonCrescent.ZIndex = 10000
+Instance.new("UICorner", moonCrescent).CornerRadius = UDim.new(1, 0)
+
+local moonGlow = Instance.new("Frame", moonSvgFrame)
+moonGlow.Size = UDim2.new(0, 100, 0, 100)
+moonGlow.Position = UDim2.new(0.5, -50, 0.5, -50)
+moonGlow.BackgroundColor3 = Color3.new(1, 1, 1)
+moonGlow.BackgroundTransparency = 0.92
+moonGlow.BorderSizePixel = 0
+moonGlow.ZIndex = 9998
+Instance.new("UICorner", moonGlow).CornerRadius = UDim.new(1, 0)
+local moonGlowGrad = Instance.new("UIGradient", moonGlow)
+Visual._moonGlowGrad = moonGlowGrad
+
+for i = 1, 6 do
+    local star = Instance.new("Frame", moonSvgFrame)
+    local sz = math.random(2, 4)
+    star.Size = UDim2.new(0, sz, 0, sz)
+    star.Position = UDim2.new(0, math.random(5, 115), 0, math.random(5, 115))
+    star.BackgroundColor3 = Color3.new(1, 1, 1)
+    star.BackgroundTransparency = 0.4
+    star.BorderSizePixel = 0
+    star.ZIndex = 10001
+    Instance.new("UICorner", star).CornerRadius = UDim.new(1, 0)
+    local starGrad = Instance.new("UIGradient", star)
+    starGrad.Color = Visual.getAuroraSequence(os.clock())
 end
 
-local notifyList = Instance.new("Frame")
-notifyList.Size = UDim2.new(0, 320, 1, -40)
-notifyList.Position = UDim2.new(1, -340, 0, 20)
-notifyList.BackgroundTransparency = 1
-notifyList.ZIndex = 200
-notifyList.Parent = screenGui
+local moonLabel = Instance.new("TextLabel", moonSvgFrame)
+moonLabel.Text = "MOON"
+moonLabel.Size = UDim2.new(1, 0, 0, 16)
+moonLabel.Position = UDim2.new(0, 0, 1, -2)
+moonLabel.BackgroundTransparency = 1
+moonLabel.TextSize = 10
+moonLabel.Font = Enum.Font.GothamBold
+moonLabel.TextXAlignment = Enum.TextXAlignment.Center
+moonLabel.ZIndex = 10002
+moonLabel.TextColor3 = Color3.new(1, 1, 1)
+local moonLabelGrad = Instance.new("UIGradient", moonLabel)
+Visual._moonLabelGrad = moonLabelGrad
 
-local notifyLayout = Instance.new("UIListLayout")
-notifyLayout.SortOrder = Enum.SortOrder.LayoutOrder
-notifyLayout.Padding = UDim.new(0, 8)
-notifyLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
-notifyLayout.Parent = notifyList
+Visual.moonSvgFrame = moonSvgFrame
 
-function Visual.Notify(title, text, duration, color)
-    duration = duration or 4
-    color = color or Visual.getAuroraColor(os.clock())
-    Visual.PlaySound("Notify", 0.24, 1.04)
+-- =============================================
+--          NOTIFICATION SYSTEM
+-- =============================================
+local nList = Instance.new("Frame", screenGui)
+nList.Size = UDim2.new(0, 320, 1, -40)
+nList.Position = UDim2.new(1, -340, 0, 20)
+nList.BackgroundTransparency = 1
+nList.ZIndex = 200
+local nLayout = Instance.new("UIListLayout", nList)
+nLayout.SortOrder = Enum.SortOrder.LayoutOrder
+nLayout.Padding = UDim.new(0, 8)
+nLayout.VerticalAlignment = Enum.VerticalAlignment.Bottom
 
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 58)
-    frame.BackgroundColor3 = Color3.fromRGB(8, 4, 16)
-    frame.BackgroundTransparency = 0.06
-    frame.BorderSizePixel = 0
-    frame.ClipsDescendants = true
-    frame.ZIndex = 201
-    frame.Parent = notifyList
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 10)
-
-    local gradFrame = Instance.new("UIGradient")
-    gradFrame.Color = Visual.getAuroraSequence(os.clock())
-    gradFrame.Rotation = 18
-    gradFrame.Parent = frame
-
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.2
-    stroke.Transparency = 0.12
-    stroke.Parent = frame
-    local strokeGrad = Instance.new("UIGradient")
-    strokeGrad.Color = Visual.getAuroraSequence(os.clock())
-    strokeGrad.Parent = stroke
-
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(1, -16, 0, 18)
-    titleLabel.Position = UDim2.new(0, 12, 0, 7)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = title or ""
-    titleLabel.TextColor3 = Color3.new(1, 1, 1)
-    titleLabel.TextSize = 12
-    titleLabel.Font = Enum.Font.GothamBold
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.ZIndex = 202
-    titleLabel.Parent = frame
-
-    local titleTextGrad = Instance.new("UIGradient")
-    titleTextGrad.Color = Visual.getAuroraSequence(os.clock())
-    titleTextGrad.Parent = titleLabel
-
-    local descLabel = Instance.new("TextLabel")
-    descLabel.Size = UDim2.new(1, -16, 0, 14)
-    descLabel.Position = UDim2.new(0, 12, 0, 28)
-    descLabel.BackgroundTransparency = 1
-    descLabel.Text = text or ""
-    descLabel.TextColor3 = Color3.fromRGB(210, 210, 255)
-    descLabel.TextSize = 10
-    descLabel.Font = Enum.Font.Gotham
-    descLabel.TextXAlignment = Enum.TextXAlignment.Left
-    descLabel.ZIndex = 202
-    descLabel.Parent = frame
-
-    local descTextGrad = Instance.new("UIGradient")
-    descTextGrad.Color = Visual.getAuroraSequence(os.clock())
-    descTextGrad.Parent = descLabel
-
-    local bar = Instance.new("Frame")
-    bar.Size = UDim2.new(1, 0, 0, 2)
-    bar.Position = UDim2.new(0, 0, 1, -2)
-    bar.BorderSizePixel = 0
-    bar.BackgroundColor3 = color
-    bar.ZIndex = 202
-    bar.Parent = frame
-    local barGrad = Instance.new("UIGradient")
-    barGrad.Color = Visual.getAuroraSequence(os.clock())
-    barGrad.Parent = bar
-
-    frame.Position = UDim2.new(1, 60, 0, 0)
-    TweenService:Create(frame, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-        Position = UDim2.new(0, 0, 0, 0)
-    }):Play()
-
-    local tween = TweenService:Create(bar, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
-        Size = UDim2.new(0, 0, 0, 2)
-    })
-    tween:Play()
-    tween.Completed:Connect(function()
-        local outTween = TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-            Position = UDim2.new(1, 60, 0, 0),
-            BackgroundTransparency = 1
-        })
-        outTween:Play()
-        outTween.Completed:Connect(function()
-            pcall(function()
-                frame:Destroy()
+function Visual.Notify(title, text, dur, col)
+    pcall(function()
+        dur = dur or 4
+        col = col or Color3.fromRGB(120, 60, 200)
+        Visual.playSound(SoundIDs.Notify, 0.2, 1.1)
+        local nf = Instance.new("Frame", nList)
+        nf.Size = UDim2.new(1, 0, 0, 60)
+        nf.BackgroundColor3 = Color3.fromRGB(8, 4, 16)
+        nf.BackgroundTransparency = 0.04
+        nf.BorderSizePixel = 0
+        nf.ClipsDescendants = true
+        nf.ZIndex = 201
+        Instance.new("UICorner", nf).CornerRadius = UDim.new(0, 10)
+        local ns = Instance.new("UIStroke", nf)
+        ns.Thickness = 1.2
+        ns.Transparency = 0.15
+        local nsG = Instance.new("UIGradient", ns)
+        nsG.Color = Visual.getAuroraSequence(os.clock())
+        local iconBar = Instance.new("Frame", nf)
+        iconBar.Size = UDim2.new(0, 3, 1, -8)
+        iconBar.Position = UDim2.new(0, 4, 0, 4)
+        iconBar.BackgroundColor3 = Color3.new(1, 1, 1)
+        iconBar.BorderSizePixel = 0
+        iconBar.ZIndex = 203
+        Instance.new("UICorner", iconBar).CornerRadius = UDim.new(0, 2)
+        local iconBarGrad = Instance.new("UIGradient", iconBar)
+        iconBarGrad.Color = Visual.getAuroraSequence(os.clock())
+        iconBarGrad.Rotation = 90
+        local tl = Instance.new("TextLabel", nf)
+        tl.Text = title or ""
+        tl.Size = UDim2.new(1, -20, 0, 18)
+        tl.Position = UDim2.new(0, 14, 0, 7)
+        tl.BackgroundTransparency = 1
+        tl.TextColor3 = Color3.new(1, 1, 1)
+        tl.TextSize = 12
+        tl.Font = Enum.Font.GothamBold
+        tl.TextXAlignment = Enum.TextXAlignment.Left
+        tl.ZIndex = 202
+        local dl = Instance.new("TextLabel", nf)
+        dl.Text = text or ""
+        dl.Size = UDim2.new(1, -20, 0, 16)
+        dl.Position = UDim2.new(0, 14, 0, 27)
+        dl.BackgroundTransparency = 1
+        dl.TextColor3 = Color3.fromRGB(170, 160, 200)
+        dl.TextSize = 10
+        dl.Font = Enum.Font.Gotham
+        dl.TextXAlignment = Enum.TextXAlignment.Left
+        dl.ZIndex = 202
+        dl.TextWrapped = true
+        local bar = Instance.new("Frame", nf)
+        bar.Size = UDim2.new(1, 0, 0, 2)
+        bar.Position = UDim2.new(0, 0, 1, -2)
+        bar.BorderSizePixel = 0
+        bar.BackgroundColor3 = Color3.new(1, 1, 1)
+        bar.ZIndex = 202
+        local barG = Instance.new("UIGradient", bar)
+        barG.Color = Visual.getAuroraSequence(os.clock())
+        nf.Position = UDim2.new(1, 60, 0, 0)
+        TS:Create(nf, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
+        local bt = TS:Create(bar, TweenInfo.new(dur, Enum.EasingStyle.Linear), {Size = UDim2.new(0, 0, 0, 2)})
+        bt:Play()
+        local c
+        c = bt.Completed:Connect(function()
+            pcall(function() c:Disconnect() end)
+            local ot = TS:Create(nf, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Position = UDim2.new(1, 60, 0, 0), BackgroundTransparency = 1})
+            ot:Play()
+            local c2
+            c2 = ot.Completed:Connect(function()
+                pcall(function() c2:Disconnect() end)
+                pcall(function() nf:Destroy() end)
             end)
         end)
     end)
 end
 
-local watermark = Instance.new("Frame")
-watermark.Size = UDim2.new(0, 220, 0, 28)
-watermark.Position = UDim2.new(0, 20, 0, 20)
-watermark.BackgroundColor3 = Color3.new(1, 1, 1)
-watermark.BackgroundTransparency = 0.08
-watermark.BorderSizePixel = 0
-watermark.ZIndex = 100
-watermark.Parent = screenGui
-Instance.new("UICorner", watermark).CornerRadius = UDim.new(0, 8)
+function Visual.NotifyKill(playerName)
+    Visual.playSound(SoundIDs.Kill, 0.4, 1.0)
+    Visual.Notify("Kill", "Eliminated " .. tostring(playerName), 3, Color3.fromRGB(255, 60, 60))
+end
 
-local watermarkGrad = Instance.new("UIGradient")
-watermarkGrad.Color = Visual.getAuroraSequence(os.clock())
-watermarkGrad.Rotation = 15
-watermarkGrad.Parent = watermark
-Visual._wmGrad = watermarkGrad
+-- =============================================
+--          RIPPLE EFFECT
+-- =============================================
+function Visual.Ripple(btn, x, y)
+    pcall(function()
+        if not btn or not btn.Parent then return end
+        local r = Instance.new("Frame", btn)
+        r.BackgroundColor3 = Color3.new(1, 1, 1)
+        r.BackgroundTransparency = 0.3
+        r.BorderSizePixel = 0
+        r.ZIndex = btn.ZIndex + 5
+        Instance.new("UICorner", r).CornerRadius = UDim.new(1, 0)
+        local rG = Instance.new("UIGradient", r)
+        rG.Color = Visual.getAuroraSequence(os.clock())
+        rG.Rotation = math.random(0, 360)
+        local maxSz = math.max(btn.AbsoluteSize.X, btn.AbsoluteSize.Y) * 2.5
+        r.Size = UDim2.new(0, 0, 0, 0)
+        r.Position = UDim2.new(0, x or 0, 0, y or 0)
+        r.AnchorPoint = Vector2.new(0.5, 0.5)
+        local t = TS:Create(r, TweenInfo.new(0.55, Enum.EasingStyle.Quint), {Size = UDim2.new(0, maxSz, 0, maxSz), BackgroundTransparency = 1})
+        t:Play()
+        local c; c = t.Completed:Connect(function() pcall(function() c:Disconnect() end); pcall(function() r:Destroy() end) end)
+    end)
+end
 
-local watermarkStroke = Instance.new("UIStroke")
-watermarkStroke.Thickness = 1
-watermarkStroke.Transparency = 0.15
-watermarkStroke.Parent = watermark
-local watermarkStrokeGrad = Instance.new("UIGradient")
-watermarkStrokeGrad.Parent = watermarkStroke
-Visual._wmStGrad = watermarkStrokeGrad
+-- =============================================
+--          WATERMARK — FULL AURORA
+-- =============================================
+local wm = Instance.new("Frame", screenGui)
+wm.Size = UDim2.new(0, 200, 0, 30)
+wm.Position = UDim2.new(0, 20, 0, 20)
+wm.BackgroundColor3 = Color3.new(1, 1, 1)
+wm.BackgroundTransparency = 0.12
+wm.BorderSizePixel = 0
+wm.ZIndex = 100
+Instance.new("UICorner", wm).CornerRadius = UDim.new(0, 8)
+local wmBgGrad = Instance.new("UIGradient", wm)
+Visual._wmBgGrad = wmBgGrad
+local wmSt = Instance.new("UIStroke", wm)
+wmSt.Thickness = 1.2
+wmSt.Transparency = 0.15
+local wmStGrad = Instance.new("UIGradient", wmSt)
+Visual._wmStGrad = wmStGrad
 
-local watermarkTitle = Instance.new("TextLabel")
-watermarkTitle.Size = UDim2.new(0, 100, 1, 0)
-watermarkTitle.Position = UDim2.new(0, 10, 0, 0)
-watermarkTitle.BackgroundTransparency = 1
-watermarkTitle.Text = "LUNA v2.7"
-watermarkTitle.TextColor3 = Color3.new(1, 1, 1)
-watermarkTitle.TextSize = 11
-watermarkTitle.Font = Enum.Font.GothamBold
-watermarkTitle.TextXAlignment = Enum.TextXAlignment.Left
-watermarkTitle.ZIndex = 101
-watermarkTitle.Parent = watermark
-local watermarkTitleGrad = Instance.new("UIGradient")
-watermarkTitleGrad.Color = Visual.getAuroraSequence(os.clock())
-watermarkTitleGrad.Parent = watermarkTitle
-Visual._wmTitleGrad = watermarkTitleGrad
+local wmTxt = Instance.new("TextLabel", wm)
+wmTxt.Size = UDim2.new(0, 100, 1, 0)
+wmTxt.Position = UDim2.new(0, 10, 0, 0)
+wmTxt.BackgroundTransparency = 1
+wmTxt.Text = "MOON v3.0"
+wmTxt.TextSize = 11
+wmTxt.Font = Enum.Font.GothamBold
+wmTxt.TextXAlignment = Enum.TextXAlignment.Left
+wmTxt.ZIndex = 101
+wmTxt.TextColor3 = Color3.new(1, 1, 1)
+local wmTxtGrad = Instance.new("UIGradient", wmTxt)
+Visual._wmTxtGrad = wmTxtGrad
 
-local watermarkTime = Instance.new("TextLabel")
-watermarkTime.Size = UDim2.new(0, 90, 1, 0)
-watermarkTime.Position = UDim2.new(1, -96, 0, 0)
-watermarkTime.BackgroundTransparency = 1
-watermarkTime.TextColor3 = Color3.new(1, 1, 1)
-watermarkTime.TextSize = 9
-watermarkTime.Font = Enum.Font.Code
-watermarkTime.TextXAlignment = Enum.TextXAlignment.Right
-watermarkTime.ZIndex = 101
-watermarkTime.Parent = watermark
-local watermarkTimeGrad = Instance.new("UIGradient")
-watermarkTimeGrad.Color = Visual.getAuroraSequence(os.clock())
-watermarkTimeGrad.Parent = watermarkTime
-Visual._wmTimeGrad = watermarkTimeGrad
-Visual.wmTime = watermarkTime
+local wmTime = Instance.new("TextLabel", wm)
+wmTime.Size = UDim2.new(0, 80, 1, 0)
+wmTime.Position = UDim2.new(1, -84, 0, 0)
+wmTime.BackgroundTransparency = 1
+wmTime.TextSize = 9
+wmTime.Font = Enum.Font.Code
+wmTime.TextXAlignment = Enum.TextXAlignment.Right
+wmTime.ZIndex = 101
+wmTime.Text = ""
+wmTime.TextColor3 = Color3.new(1, 1, 1)
+local wmTimeGrad = Instance.new("UIGradient", wmTime)
+Visual._wmTimeGrad = wmTimeGrad
+Visual.wmTime = wmTime
 
+-- =============================================
+--          BINDS DISPLAY — FULL AURORA, ANIMATED SLIDES
+-- =============================================
+local bindsFrame = Instance.new("Frame", screenGui)
+bindsFrame.Size = UDim2.new(0, 160, 0, 28)
+bindsFrame.Position = UDim2.new(1, -180, 0, 56)
+bindsFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+bindsFrame.BackgroundTransparency = 0.12
+bindsFrame.BorderSizePixel = 0
+bindsFrame.ZIndex = 100
+bindsFrame.ClipsDescendants = true
+Instance.new("UICorner", bindsFrame).CornerRadius = UDim.new(0, 8)
+local bfBgGrad = Instance.new("UIGradient", bindsFrame)
+Visual._bfBgGrad = bfBgGrad
+local bfSt = Instance.new("UIStroke", bindsFrame)
+bfSt.Thickness = 1.2
+bfSt.Transparency = 0.15
+local bfStGrad = Instance.new("UIGradient", bfSt)
+Visual._bfStGrad = bfStGrad
+
+local bfTitle = Instance.new("TextLabel", bindsFrame)
+bfTitle.Size = UDim2.new(1, -8, 0, 16)
+bfTitle.Position = UDim2.new(0, 6, 0, 2)
+bfTitle.BackgroundTransparency = 1
+bfTitle.Text = "BINDS"
+bfTitle.TextSize = 9
+bfTitle.Font = Enum.Font.GothamBold
+bfTitle.TextXAlignment = Enum.TextXAlignment.Left
+bfTitle.ZIndex = 101
+bfTitle.TextColor3 = Color3.new(1, 1, 1)
+local bfTitleGrad = Instance.new("UIGradient", bfTitle)
+Visual._bfTitleGrad = bfTitleGrad
+
+local bfContent = Instance.new("Frame", bindsFrame)
+bfContent.Size = UDim2.new(1, -8, 1, -18)
+bfContent.Position = UDim2.new(0, 4, 0, 18)
+bfContent.BackgroundTransparency = 1
+bfContent.ZIndex = 101
+bfContent.ClipsDescendants = true
+local bfLayout = Instance.new("UIListLayout", bfContent)
+bfLayout.Padding = UDim.new(0, 2)
+bfLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+Visual._bfDrag = {drag = false, start = nil, pos = nil}
+bindsFrame.InputBegan:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        Visual._bfDrag.drag = true
+        Visual._bfDrag.start = i.Position
+        Visual._bfDrag.pos = bindsFrame.Position
+    end
+end)
+bindsFrame.InputEnded:Connect(function(i)
+    if i.UserInputType == Enum.UserInputType.MouseButton1 then
+        Visual._bfDrag.drag = false
+    end
+end)
+
+Visual._prevBindItems = {}
+Visual._bindRows = {}
+
+function Visual.updateActiveBinds(CFG, C, aimActive, tgtActive)
+    local items = {}
+    local function add(name, key, active)
+        items[#items+1] = {n = name, k = key, a = active}
+    end
+    add("Aimbot", CFG.AimKey, CFG.Enabled)
+    if aimActive then add("Locking", CFG.AimKey, true) end
+    if tgtActive then add("Target", CFG.TargetKey, true) end
+    add("Triggerbot", "", CFG.Triggerbot)
+    add("ESP", "", CFG.ShowESP)
+    if CFG.ShowChams then add("Chams", "", true) end
+    add("Dash", CFG.DashKey, CFG.DashEnabled)
+    if CFG.RageSpin then add("Spin", "", true) end
+    if CFG.RageDash then add("R.Dash", "", true) end
+    if CFG.RageTarget then add("R.Target", "", true) end
+
+    local newKeys = {}
+    for _, item in ipairs(items) do
+        newKeys[item.n] = true
+    end
+
+    for name, row in pairs(Visual._bindRows) do
+        if not newKeys[name] then
+            TS:Create(row, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+                Size = UDim2.new(1, 0, 0, 0),
+                BackgroundTransparency = 1
+            }):Play()
+            task.delay(0.3, function() pcall(function() row:Destroy() end) end)
+            Visual._bindRows[name] = nil
+        end
+    end
+
+    for idx, item in ipairs(items) do
+        local existing = Visual._bindRows[item.n]
+        if not existing or not existing.Parent then
+            local row = Instance.new("Frame", bfContent)
+            row.Size = UDim2.new(1, 0, 0, 0)
+            row.BackgroundColor3 = Color3.new(1, 1, 1)
+            row.BackgroundTransparency = 0.85
+            row.BorderSizePixel = 0
+            row.LayoutOrder = idx
+            row.ZIndex = 102
+            row.ClipsDescendants = true
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
+            local rowGrad = Instance.new("UIGradient", row)
+            rowGrad.Color = Visual.getAuroraSequence(os.clock())
+
+            local lbl = Instance.new("TextLabel", row)
+            lbl.Size = UDim2.new(1, -6, 1, 0)
+            lbl.Position = UDim2.new(0, 4, 0, 0)
+            lbl.BackgroundTransparency = 1
+            lbl.TextSize = 9
+            lbl.Font = Enum.Font.GothamBold
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.ZIndex = 103
+            lbl.TextColor3 = Color3.new(1, 1, 1)
+            local lblGrad = Instance.new("UIGradient", lbl)
+            lblGrad.Color = Visual.getAuroraSequence(os.clock())
+            local keyTxt = item.k ~= "" and " (" .. item.k .. ")" or ""
+            lbl.Text = (item.a and "● " or "○ ") .. item.n .. (item.a and " ON" or " OFF") .. keyTxt
+
+            TS:Create(row, TweenInfo.new(0.35, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                Size = UDim2.new(1, 0, 0, 16)
+            }):Play()
+
+            Visual._bindRows[item.n] = row
+            Visual.playSound(SoundIDs.BindActivate, 0.1, 1.2)
+        else
+            existing.LayoutOrder = idx
+            local lbl = existing:FindFirstChildOfClass("TextLabel")
+            if lbl then
+                local keyTxt = item.k ~= "" and " (" .. item.k .. ")" or ""
+                lbl.Text = (item.a and "● " or "○ ") .. item.n .. (item.a and " ON" or " OFF") .. keyTxt
+            end
+        end
+    end
+
+    local totalH = math.max(#items * 18 + 22, 28)
+    TS:Create(bindsFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
+        Size = UDim2.new(0, 160, 0, totalH)
+    }):Play()
+end
+Visual.bindsFrame = bindsFrame
+
+-- =============================================
+--          LOADING SCREEN
+-- =============================================
 function Visual.showLoadingScreen()
     local loadGui = Instance.new("ScreenGui")
     loadGui.Name = "MoonLoad"
     loadGui.ResetOnSpawn = false
     loadGui.DisplayOrder = 100000
     loadGui.IgnoreGuiInset = true
-    safeParent(loadGui)
+    local ok2 = false
+    if gethui then ok2 = pcall(function() loadGui.Parent = gethui() end) end
+    if not ok2 then pcall(function() loadGui.Parent = game.CoreGui end) end
+    if not loadGui.Parent then loadGui.Parent = LP.PlayerGui end
 
     local blur = Instance.new("BlurEffect")
     blur.Name = "MoonLoadBlur"
     blur.Size = 0
     blur.Parent = Lighting
 
-    local dim = Instance.new("Frame")
-    dim.Size = UDim2.new(1, 0, 1, 0)
-    dim.BackgroundColor3 = Color3.new(1, 1, 1)
-    dim.BackgroundTransparency = 0.1
-    dim.BorderSizePixel = 0
-    dim.Parent = loadGui
-    local dimGrad = Instance.new("UIGradient")
-    dimGrad.Color = Visual.getAuroraSequence(os.clock())
-    dimGrad.Rotation = 30
-    dimGrad.Parent = dim
+    local loadDim = Instance.new("Frame", loadGui)
+    loadDim.Size = UDim2.new(1, 0, 1, 0)
+    loadDim.BackgroundColor3 = Color3.fromRGB(3, 1, 8)
+    loadDim.BackgroundTransparency = 0.15
+    loadDim.BorderSizePixel = 0
 
-    local card = Instance.new("Frame")
-    card.Size = UDim2.new(0, 360, 0, 108)
-    card.Position = UDim2.new(0.5, -180, 0.5, -54)
-    card.BackgroundColor3 = Color3.new(1, 1, 1)
+    local card = Instance.new("Frame", loadGui)
+    card.Size = UDim2.new(0, 360, 0, 120)
+    card.Position = UDim2.new(0.5, -180, 0.5, -60)
+    card.BackgroundColor3 = Color3.fromRGB(10, 6, 20)
     card.BackgroundTransparency = 1
     card.BorderSizePixel = 0
-    card.Parent = loadGui
     Instance.new("UICorner", card).CornerRadius = UDim.new(0, 14)
-    local cardGrad = Instance.new("UIGradient")
-    cardGrad.Color = Visual.getAuroraSequence(os.clock())
-    cardGrad.Rotation = 20
-    cardGrad.Parent = card
+    local cSt = Instance.new("UIStroke", card)
+    cSt.Thickness = 1.5
+    cSt.Transparency = 1
+    local cStGrad = Instance.new("UIGradient", cSt)
 
-    local cardStroke = Instance.new("UIStroke")
-    cardStroke.Thickness = 1.5
-    cardStroke.Transparency = 1
-    cardStroke.Parent = card
-    local cardStrokeGrad = Instance.new("UIGradient")
-    cardStrokeGrad.Parent = cardStroke
+    local lTitle = Instance.new("TextLabel", card)
+    lTitle.Text = "MOON"
+    lTitle.Size = UDim2.new(1, 0, 0, 24)
+    lTitle.Position = UDim2.new(0, 0, 0, 14)
+    lTitle.BackgroundTransparency = 1
+    lTitle.TextColor3 = Color3.fromRGB(200, 170, 255)
+    lTitle.TextTransparency = 1
+    lTitle.TextSize = 20
+    lTitle.Font = Enum.Font.GothamBold
+    lTitle.TextXAlignment = Enum.TextXAlignment.Center
 
-    local title = Instance.new("TextLabel")
-    title.Text = "LUNA"
-    title.Size = UDim2.new(1, 0, 0, 24)
-    title.Position = UDim2.new(0, 0, 0, 14)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.new(1, 1, 1)
-    title.TextTransparency = 1
-    title.TextSize = 18
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Center
-    title.Parent = card
-    local titleGrad = Instance.new("UIGradient")
-    titleGrad.Color = Visual.getAuroraSequence(os.clock())
-    titleGrad.Parent = title
+    local lSub = Instance.new("TextLabel", card)
+    lSub.Text = "loading..."
+    lSub.Size = UDim2.new(1, 0, 0, 14)
+    lSub.Position = UDim2.new(0, 0, 0, 46)
+    lSub.BackgroundTransparency = 1
+    lSub.TextColor3 = Color3.fromRGB(140, 120, 170)
+    lSub.TextTransparency = 1
+    lSub.TextSize = 10
+    lSub.Font = Enum.Font.Gotham
+    lSub.TextXAlignment = Enum.TextXAlignment.Center
 
-    local sub = Instance.new("TextLabel")
-    sub.Text = "initializing..."
-    sub.Size = UDim2.new(1, 0, 0, 14)
-    sub.Position = UDim2.new(0, 0, 0, 44)
-    sub.BackgroundTransparency = 1
-    sub.TextColor3 = Color3.new(1, 1, 1)
-    sub.TextTransparency = 1
-    sub.TextSize = 10
-    sub.Font = Enum.Font.Gotham
-    sub.TextXAlignment = Enum.TextXAlignment.Center
-    sub.Parent = card
-    local subGrad = Instance.new("UIGradient")
-    subGrad.Color = Visual.getAuroraSequence(os.clock())
-    subGrad.Parent = sub
+    local lBarBg = Instance.new("Frame", card)
+    lBarBg.Size = UDim2.new(0, 0, 0, 3)
+    lBarBg.Position = UDim2.new(0.5, 0, 0, 72)
+    lBarBg.AnchorPoint = Vector2.new(0.5, 0)
+    lBarBg.BackgroundColor3 = Color3.fromRGB(25, 15, 40)
+    lBarBg.BackgroundTransparency = 1
+    lBarBg.BorderSizePixel = 0
+    Instance.new("UICorner", lBarBg).CornerRadius = UDim.new(1, 0)
 
-    local barBg = Instance.new("Frame")
-    barBg.Size = UDim2.new(0, 0, 0, 3)
-    barBg.Position = UDim2.new(0.5, 0, 0, 72)
-    barBg.AnchorPoint = Vector2.new(0.5, 0)
-    barBg.BackgroundColor3 = Color3.new(1, 1, 1)
-    barBg.BackgroundTransparency = 0.7
-    barBg.BorderSizePixel = 0
-    barBg.Parent = card
-    Instance.new("UICorner", barBg).CornerRadius = UDim.new(1, 0)
-    local barBgGrad = Instance.new("UIGradient")
-    barBgGrad.Color = Visual.getAuroraSequence(os.clock())
-    barBgGrad.Parent = barBg
+    local lBarFill = Instance.new("Frame", lBarBg)
+    lBarFill.Size = UDim2.new(0, 0, 1, 0)
+    lBarFill.BackgroundColor3 = Color3.new(1, 1, 1)
+    lBarFill.BorderSizePixel = 0
+    Instance.new("UICorner", lBarFill).CornerRadius = UDim.new(1, 0)
+    local lBarGrad = Instance.new("UIGradient", lBarFill)
 
-    local barFill = Instance.new("Frame")
-    barFill.Size = UDim2.new(0, 0, 1, 0)
-    barFill.BackgroundColor3 = Color3.new(1, 1, 1)
-    barFill.BorderSizePixel = 0
-    barFill.Parent = barBg
-    Instance.new("UICorner", barFill).CornerRadius = UDim.new(1, 0)
-    local barFillGrad = Instance.new("UIGradient")
-    barFillGrad.Color = Visual.getAuroraSequence(os.clock())
-    barFillGrad.Parent = barFill
+    TS:Create(blur, TweenInfo.new(0.5), {Size = 16}):Play()
+    TS:Create(card, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.06}):Play()
+    TS:Create(cSt, TweenInfo.new(0.5), {Transparency = 0.15}):Play()
+    TS:Create(lTitle, TweenInfo.new(0.5), {TextTransparency = 0}):Play()
+    TS:Create(lSub, TweenInfo.new(0.5), {TextTransparency = 0.15}):Play()
+    TS:Create(lBarBg, TweenInfo.new(0.4), {Size = UDim2.new(0, 280, 0, 3), BackgroundTransparency = 0.4}):Play()
 
-    TweenService:Create(blur, TweenInfo.new(0.5), {Size = 18}):Play()
-    TweenService:Create(card, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.08}):Play()
-    TweenService:Create(cardStroke, TweenInfo.new(0.5), {Transparency = 0.14}):Play()
-    TweenService:Create(title, TweenInfo.new(0.5), {TextTransparency = 0}):Play()
-    TweenService:Create(sub, TweenInfo.new(0.5), {TextTransparency = 0.15}):Play()
-    TweenService:Create(barBg, TweenInfo.new(0.4), {
-        Size = UDim2.new(0, 280, 0, 3),
-        BackgroundTransparency = 0.45
-    }):Play()
-
-    local stages = {
-        {10, "mapping"},
-        {25, "patching"},
-        {45, "injecting"},
-        {65, "calibrating"},
-        {85, "loading"},
-        {100, "ready"}
-    }
-
+    local stages = {{10,"initializing"},{25,"mapping"},{40,"patching"},{55,"injecting"},{70,"hooking"},{85,"bypassing"},{95,"loading"},{100,"ready"}}
     task.spawn(function()
         task.wait(0.6)
-        for _, stage in ipairs(stages) do
-            barFillGrad.Color = Visual.getAuroraSequence(os.clock())
-            cardStrokeGrad.Color = Visual.getAuroraSequence(os.clock())
-            TweenService:Create(barFill, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {
-                Size = UDim2.new(stage[1] / 100, 0, 1, 0)
-            }):Play()
-            sub.Text = stage[2]
-            task.wait(math.random(10, 22) * 0.01)
+        for _, s in ipairs(stages) do
+            lBarGrad.Color = Visual.getAuroraSequence(os.clock())
+            cStGrad.Color = Visual.getAuroraSequence(os.clock())
+            TS:Create(lBarFill, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {Size = UDim2.new(s[1]/100, 0, 1, 0)}):Play()
+            lSub.Text = s[2]
+            task.wait(math.random(8, 18) * 0.01)
         end
-
-        sub.Text = "complete"
-        sub.TextColor3 = Color3.fromRGB(255, 255, 255)
-
+        lSub.Text = "complete"
+        lSub.TextColor3 = Color3.fromRGB(140, 255, 180)
         task.wait(0.4)
-        TweenService:Create(card, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-        TweenService:Create(cardStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
-        TweenService:Create(title, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
-        TweenService:Create(sub, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
-        TweenService:Create(barFill, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-        TweenService:Create(barBg, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-        TweenService:Create(dim, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
-        TweenService:Create(blur, TweenInfo.new(0.3), {Size = 0}):Play()
-
+        TS:Create(card, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        TS:Create(cSt, TweenInfo.new(0.3), {Transparency = 1}):Play()
+        TS:Create(lTitle, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+        TS:Create(lSub, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+        TS:Create(lBarFill, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        TS:Create(lBarBg, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        TS:Create(loadDim, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        TS:Create(blur, TweenInfo.new(0.3), {Size = 0}):Play()
         task.wait(0.4)
-        pcall(function()
-            blur:Destroy()
-        end)
-        pcall(function()
-            loadGui:Destroy()
-        end)
+        pcall(function() blur:Destroy() end)
+        pcall(function() loadGui:Destroy() end)
     end)
 end
 
-local blurMain = Instance.new("BlurEffect")
+-- =============================================
+--          CLEANUP OLD GUIS
+-- =============================================
+for _, n in ipairs({"SakuraGUI_v19","SakuraGUI_v18","SakuraGUI","SakuraGUI_v20","MoonGUI_Main","MoonGUI"}) do
+    pcall(function() if game.CoreGui:FindFirstChild(n) then game.CoreGui[n]:Destroy() end end)
+    pcall(function() if gethui and gethui():FindFirstChild(n) then gethui()[n]:Destroy() end end)
+end
+for _, v in pairs(Lighting:GetChildren()) do
+    if v.Name:find("SakuraMainBlur") or v.Name:find("MoonBlur") then pcall(function() v:Destroy() end) end
+end
+
+-- =============================================
+--          MAIN GUI
+-- =============================================
+local blurMain = Instance.new("BlurEffect", Lighting)
 blurMain.Name = "MoonBlur"
 blurMain.Size = 0
-blurMain.Parent = Lighting
 Visual.blurMain = blurMain
 
 local gui = Instance.new("ScreenGui")
@@ -513,1539 +661,842 @@ gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.DisplayOrder = 999
 gui.IgnoreGuiInset = true
-safeParent(gui)
+local gOk = false
+if gethui then gOk = pcall(function() gui.Parent = gethui() end) end
+if not gOk then pcall(function() gui.Parent = game.CoreGui end) end
+if not gui.Parent then gui.Parent = LP.PlayerGui end
 Visual.gui = gui
 
-local guiScale = Instance.new("UIScale")
-guiScale.Parent = gui
+local guiScale = Instance.new("UIScale", gui)
 task.spawn(function()
     while gui and gui.Parent do
-        guiScale.Scale = math.clamp(
-            math.min(Visual.getVP().X / BASE_W, Visual.getVP().Y / BASE_H),
-            0.5,
-            3
-        )
-        task.wait(0.6)
+        pcall(function()
+            guiScale.Scale = math.clamp(math.min(Visual.getVP().X / BASE_W, Visual.getVP().Y / BASE_H), 0.5, 3)
+        end)
+        task.wait(1)
     end
 end)
 
-local fullAurora = Instance.new("Frame")
-fullAurora.Size = UDim2.new(1, 0, 1, 0)
-fullAurora.BackgroundColor3 = Color3.new(1, 1, 1)
-fullAurora.BackgroundTransparency = 1
-fullAurora.BorderSizePixel = 0
-fullAurora.ZIndex = 7
-fullAurora.Visible = false
-fullAurora.Parent = gui
-local fullAuroraGrad = Instance.new("UIGradient")
-fullAuroraGrad.Color = Visual.getAuroraSequence(os.clock())
-fullAuroraGrad.Rotation = 30
-fullAuroraGrad.Parent = fullAurora
-Visual._fullAurora = fullAurora
-Visual._fullAuroraGrad = fullAuroraGrad
-
-local dimOverlay = Instance.new("Frame")
+local dimOverlay = Instance.new("Frame", gui)
 dimOverlay.Size = UDim2.new(1, 0, 1, 0)
 dimOverlay.BackgroundColor3 = Color3.new(0, 0, 0)
 dimOverlay.BackgroundTransparency = 1
 dimOverlay.BorderSizePixel = 0
 dimOverlay.ZIndex = 8
 dimOverlay.Visible = false
-dimOverlay.Parent = gui
 Visual.dimOverlay = dimOverlay
 
-local moonCanvas = Instance.new("Frame")
-moonCanvas.Size = UDim2.new(0, 120, 0, 120)
-moonCanvas.Position = UDim2.new(1, -148, 0, 90)
-moonCanvas.BackgroundTransparency = 1
-moonCanvas.ZIndex = 150
-moonCanvas.Visible = false
-moonCanvas.Parent = screenGui
-
-local moonOuter = Instance.new("Frame")
-moonOuter.Size = UDim2.new(0, 70, 0, 70)
-moonOuter.Position = UDim2.new(0.5, -35, 0.5, -35)
-moonOuter.BackgroundColor3 = Color3.new(1, 1, 1)
-moonOuter.BackgroundTransparency = 0.15
-moonOuter.BorderSizePixel = 0
-moonOuter.ZIndex = 151
-moonOuter.Parent = moonCanvas
-Instance.new("UICorner", moonOuter).CornerRadius = UDim.new(1, 0)
-local moonOuterGrad = Instance.new("UIGradient")
-moonOuterGrad.Color = Visual.getAuroraSequence(os.clock())
-moonOuterGrad.Parent = moonOuter
-Visual._moonOuterGrad = moonOuterGrad
-
-local moonCut = Instance.new("Frame")
-moonCut.Size = UDim2.new(0, 58, 0, 58)
-moonCut.Position = UDim2.new(0.5, -18, 0.5, -29)
-moonCut.BackgroundColor3 = Color3.fromRGB(6, 3, 12)
-moonCut.BackgroundTransparency = 0.05
-moonCut.BorderSizePixel = 0
-moonCut.ZIndex = 152
-moonCut.Parent = moonCanvas
-Instance.new("UICorner", moonCut).CornerRadius = UDim.new(1, 0)
-
-Visual.moonCanvas = moonCanvas
-Visual.moonOuter = moonOuter
-
-local bindsFrame = Instance.new("Frame")
-bindsFrame.Size = UDim2.new(0, 188, 0, 28)
-bindsFrame.Position = UDim2.new(1, -210, 0, 56)
-bindsFrame.BackgroundColor3 = Color3.new(1, 1, 1)
-bindsFrame.BackgroundTransparency = 0.08
-bindsFrame.BorderSizePixel = 0
-bindsFrame.ZIndex = 100
-bindsFrame.ClipsDescendants = true
-bindsFrame.Parent = screenGui
-Instance.new("UICorner", bindsFrame).CornerRadius = UDim.new(0, 10)
-
-local bindsGrad = Instance.new("UIGradient")
-bindsGrad.Color = Visual.getAuroraSequence(os.clock())
-bindsGrad.Rotation = 20
-bindsGrad.Parent = bindsFrame
-Visual._bindsGrad = bindsGrad
-
-local bindsStroke = Instance.new("UIStroke")
-bindsStroke.Thickness = 1
-bindsStroke.Transparency = 0.15
-bindsStroke.Parent = bindsFrame
-local bindsStrokeGrad = Instance.new("UIGradient")
-bindsStrokeGrad.Parent = bindsStroke
-Visual._bfStGrad = bindsStrokeGrad
-
-local bindsTitle = Instance.new("TextLabel")
-bindsTitle.Size = UDim2.new(1, -10, 0, 16)
-bindsTitle.Position = UDim2.new(0, 8, 0, 4)
-bindsTitle.BackgroundTransparency = 1
-bindsTitle.Text = "BINDS"
-bindsTitle.TextColor3 = Color3.new(1, 1, 1)
-bindsTitle.TextSize = 9
-bindsTitle.Font = Enum.Font.GothamBold
-bindsTitle.TextXAlignment = Enum.TextXAlignment.Left
-bindsTitle.ZIndex = 101
-bindsTitle.Parent = bindsFrame
-local bindsTitleGrad = Instance.new("UIGradient")
-bindsTitleGrad.Color = Visual.getAuroraSequence(os.clock())
-bindsTitleGrad.Parent = bindsTitle
-Visual._bindsTitleGrad = bindsTitleGrad
-
-local bindsContent = Instance.new("Frame")
-bindsContent.Size = UDim2.new(1, -10, 1, -22)
-bindsContent.Position = UDim2.new(0, 5, 0, 22)
-bindsContent.BackgroundTransparency = 1
-bindsContent.ZIndex = 101
-bindsContent.Parent = bindsFrame
-
-local bindsLayout = Instance.new("UIListLayout")
-bindsLayout.Padding = UDim.new(0, 3)
-bindsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-bindsLayout.Parent = bindsContent
-
-Visual._bfDrag = {drag = false, start = nil, pos = nil}
-bindsFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        Visual._bfDrag.drag = true
-        Visual._bfDrag.start = input.Position
-        Visual._bfDrag.pos = bindsFrame.Position
-    end
-end)
-bindsFrame.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        Visual._bfDrag.drag = false
-    end
-end)
-
-Visual._bindsStateCache = {}
-
-function Visual.pushBindEvent(text)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, 0, 0, 0)
-    row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.12
-    row.BorderSizePixel = 0
-    row.ZIndex = 104
-    row.ClipsDescendants = true
-    row.Parent = bindsContent
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-
-    local rowGrad = Instance.new("UIGradient")
-    rowGrad.Color = Visual.getAuroraSequence(os.clock())
-    rowGrad.Rotation = 12
-    rowGrad.Parent = row
-
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -10, 1, 0)
-    label.Position = UDim2.new(0, 10, 0, 0)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.TextSize = 10
-    label.Font = Enum.Font.GothamBold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.TextTransparency = 1
-    label.ZIndex = 105
-    label.Parent = row
-
-    local labelGrad = Instance.new("UIGradient")
-    labelGrad.Color = Visual.getAuroraSequence(os.clock())
-    labelGrad.Parent = label
-
-    TweenService:Create(row, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-        Size = UDim2.new(1, 0, 0, 22)
-    }):Play()
-    TweenService:Create(label, TweenInfo.new(0.24), {
-        TextTransparency = 0
-    }):Play()
-
-    task.delay(2.1, function()
-        TweenService:Create(label, TweenInfo.new(0.2), {
-            TextTransparency = 1
-        }):Play()
-        local outTween = TweenService:Create(row, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-            Size = UDim2.new(1, 0, 0, 0),
-            BackgroundTransparency = 1
-        })
-        outTween:Play()
-        outTween.Completed:Connect(function()
-            pcall(function()
-                row:Destroy()
-            end)
-        end)
-    end)
-end
-
-function Visual.updateActiveBinds(CFG, C, aimActive, targetActive, spinActive, rageMode)
-    local stateMap = {
-        {"Aimbot", CFG.Enabled, "aim " .. (CFG.Enabled and "on" or "off") .. " (" .. tostring(CFG.AimKey or "?") .. ")"},
-        {"Locking", aimActive, "aim lock (" .. tostring(CFG.AimKey or "?") .. ")"},
-        {"Target", targetActive, "target on (" .. tostring(CFG.TargetKey or "?") .. ")"},
-        {"Spin", spinActive, "spin on (" .. tostring(CFG.AimKey or "?") .. ")"},
-        {"Triggerbot", CFG.Triggerbot, "trigger on"},
-        {"ESP", CFG.ShowESP, "esp on"},
-        {"Dash", CFG.DashEnabled, "dash ready (" .. tostring(CFG.DashKey or "?") .. ")"},
-        {"Rage", rageMode, rageMode and "rage mode enabled" or "rage mode disabled"},
-        {"R.Dash", CFG.RageDash, "rage dash on"},
-        {"R.Target", CFG.RageTarget, "rage target on"},
-    }
-
-    for _, item in ipairs(stateMap) do
-        local cacheKey = item[1]
-        local current = item[2]
-        if Visual._bindsStateCache[cacheKey] == nil then
-            Visual._bindsStateCache[cacheKey] = current
-        elseif Visual._bindsStateCache[cacheKey] ~= current then
-            Visual._bindsStateCache[cacheKey] = current
-            if current then
-                Visual.pushBindEvent(item[3])
-            end
-        end
-    end
-
-    for _, child in ipairs(bindsContent:GetChildren()) do
-        if child:IsA("Frame") and child.Name == "BindStateRow" then
-            child:Destroy()
-        end
-    end
-
-    local items = {}
-    local function add(name, active, keyText)
-        table.insert(items, {n = name, a = active, k = keyText or ""})
-    end
-
-    add("Aimbot", CFG.Enabled, CFG.AimKey)
-    if aimActive then add("Locking", true, CFG.AimKey) end
-    if targetActive then add("Target", true, CFG.TargetKey) end
-    if spinActive then add("Spin", true, CFG.AimKey) end
-    add("Trigger", CFG.Triggerbot, "")
-    add("ESP", CFG.ShowESP, "")
-    add("Dash", CFG.DashEnabled, CFG.DashKey)
-    if rageMode then add("Rage", true, "") end
-    if CFG.RageDash then add("R.Dash", true, "") end
-    if CFG.RageTarget then add("R.Target", true, "") end
-
-    local layoutOrder = 1000
-    for index, item in ipairs(items) do
-        local row = Instance.new("Frame")
-        row.Name = "BindStateRow"
-        row.Size = UDim2.new(1, 0, 0, 18)
-        row.BackgroundColor3 = Color3.new(1, 1, 1)
-        row.BackgroundTransparency = 0.2
-        row.BorderSizePixel = 0
-        row.ZIndex = 102
-        row.LayoutOrder = layoutOrder + index
-        row.Parent = bindsContent
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 7)
-
-        local rowGrad = Instance.new("UIGradient")
-        rowGrad.Color = Visual.getAuroraSequence(os.clock() + index)
-        rowGrad.Rotation = 25
-        rowGrad.Parent = row
-
-        local label = Instance.new("TextLabel")
-        label.Size = UDim2.new(1, -10, 1, 0)
-        label.Position = UDim2.new(0, 8, 0, 0)
-        label.BackgroundTransparency = 1
-        label.Text = item.k ~= "" and (item.n .. " (" .. item.k .. ")") or item.n
-        label.TextColor3 = Color3.new(1, 1, 1)
-        label.TextSize = 9
-        label.Font = Enum.Font.GothamBold
-        label.TextXAlignment = Enum.TextXAlignment.Left
-        label.ZIndex = 103
-        label.Parent = row
-        local labelGrad = Instance.new("UIGradient")
-        labelGrad.Color = Visual.getAuroraSequence(os.clock() + index * 0.2)
-        labelGrad.Parent = label
-    end
-
-    local height = math.max(28 + #items * 21, 28)
-    bindsFrame.Size = UDim2.new(0, 188, 0, math.min(height + 8, 220))
-end
-Visual.bindsFrame = bindsFrame
-
-local HUD_MAX = 18
-local hudFrame = Instance.new("Frame")
-hudFrame.Size = UDim2.new(0, 220, 0, 180)
-hudFrame.Position = UDim2.new(0, 20, 0.5, -90)
-hudFrame.BackgroundColor3 = Color3.new(1, 1, 1)
-hudFrame.BackgroundTransparency = 0.12
+-- =============================================
+--          HUD
+-- =============================================
+local HUD_MAX = 16
+local hudFrame = Instance.new("Frame", gui)
+hudFrame.Size = UDim2.new(0, 210, 0, 200)
+hudFrame.Position = UDim2.new(0, 20, 0.5, -100)
+hudFrame.BackgroundColor3 = Color3.fromRGB(6, 3, 12)
+hudFrame.BackgroundTransparency = 0.15
 hudFrame.BorderSizePixel = 0
 hudFrame.ZIndex = 5
 hudFrame.Visible = false
 hudFrame.ClipsDescendants = true
-hudFrame.Parent = gui
 Instance.new("UICorner", hudFrame).CornerRadius = UDim.new(0, 10)
-local hudGrad = Instance.new("UIGradient")
-hudGrad.Color = Visual.getAuroraSequence(os.clock())
-hudGrad.Rotation = 15
-hudGrad.Parent = hudFrame
-Visual._hudGrad = hudGrad
-
-local hudStroke = Instance.new("UIStroke")
-hudStroke.Thickness = 1
-hudStroke.Transparency = 0.18
-hudStroke.Parent = hudFrame
-local hudStrokeGrad = Instance.new("UIGradient")
-hudStrokeGrad.Parent = hudStroke
-Visual._hudStGrad = hudStrokeGrad
-
-local hudLayout = Instance.new("UIListLayout")
+local hudSt = Instance.new("UIStroke", hudFrame)
+hudSt.Thickness = 1
+hudSt.Transparency = 0.4
+local hudStGrad = Instance.new("UIGradient", hudSt)
+Visual._hudStGrad = hudStGrad
+local hudLayout = Instance.new("UIListLayout", hudFrame)
 hudLayout.Padding = UDim.new(0, 2)
-hudLayout.Parent = hudFrame
-
-local hudPadding = Instance.new("UIPadding")
-hudPadding.PaddingTop = UDim.new(0, 7)
-hudPadding.PaddingLeft = UDim.new(0, 10)
-hudPadding.PaddingRight = UDim.new(0, 10)
-hudPadding.PaddingBottom = UDim.new(0, 7)
-hudPadding.Parent = hudFrame
-
-local hudLabels = {}
+local hp2 = Instance.new("UIPadding", hudFrame)
+hp2.PaddingTop = UDim.new(0, 7)
+hp2.PaddingLeft = UDim.new(0, 10)
+hp2.PaddingRight = UDim.new(0, 10)
+hp2.PaddingBottom = UDim.new(0, 7)
+local hudT = {}
 for i = 1, HUD_MAX do
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 0, 13)
-    label.BackgroundTransparency = 1
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 10
-    label.Visible = false
-    label.ZIndex = 6
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.Parent = hudFrame
-    local labelGrad = Instance.new("UIGradient")
-    labelGrad.Color = Visual.getAuroraSequence(os.clock() + i * 0.1)
-    labelGrad.Parent = label
-    hudLabels[i] = label
+    local l = Instance.new("TextLabel", hudFrame)
+    l.Size = UDim2.new(1, 0, 0, 13)
+    l.BackgroundTransparency = 1
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.Font = Enum.Font.GothamBold
+    l.TextSize = 10
+    l.Visible = false
+    l.ZIndex = 6
+    l.TextColor3 = Color3.fromRGB(220, 210, 250)
+    l.Text = ""
+    hudT[i] = l
 end
 Visual.hudFrame = hudFrame
-Visual.hudT = hudLabels
+Visual.hudT = hudT
+Visual.hudSt = hudSt
 Visual.HUD_MAX = HUD_MAX
 
-local WIN_MODES = {
-    {w = 860, h = 580},
-    {w = 680, h = 460},
-    {w = 1120, h = 700}
-}
-Visual.WIN_MODES = WIN_MODES
+-- =============================================
+--          CHAMS SYSTEM
+-- =============================================
+Visual._chamsCache = {}
+Visual._chamsEnabled = false
 
-function Visual.getWS(CFG)
-    local mode = WIN_MODES[CFG.WindowMode] or WIN_MODES[1]
-    return mode.w, mode.h
+function Visual.createChams(character, color)
+    if not character or not character.Parent then return nil end
+    local existing = Visual._chamsCache[character]
+    if existing and existing.Parent then
+        existing.FillColor = color or Visual.getAuroraColor(os.clock(), 0)
+        existing.OutlineColor = Visual.getAuroraColor(os.clock(), 1.5)
+        return existing
+    end
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "MoonChams"
+    highlight.FillColor = color or Visual.getAuroraColor(os.clock(), 0)
+    highlight.FillTransparency = 0.65
+    highlight.OutlineColor = Visual.getAuroraColor(os.clock(), 1)
+    highlight.OutlineTransparency = 0.1
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Adornee = character
+    highlight.Parent = character
+    Visual._chamsCache[character] = highlight
+    return highlight
 end
 
-local windowW, windowH = 860, 580
+function Visual.removeChams(character)
+    local h = Visual._chamsCache[character]
+    if h then pcall(function() h:Destroy() end); Visual._chamsCache[character] = nil end
+end
 
-local mainWindow = Instance.new("Frame")
-mainWindow.Name = "W"
-mainWindow.Size = UDim2.new(0, windowW, 0, windowH)
-mainWindow.Position = UDim2.new(0.5, -windowW / 2, 0.5, -windowH / 2)
-mainWindow.BackgroundColor3 = Color3.new(1, 1, 1)
-mainWindow.BackgroundTransparency = 0.06
-mainWindow.BorderSizePixel = 0
-mainWindow.Visible = false
-mainWindow.ZIndex = 10
-mainWindow.ClipsDescendants = true
-mainWindow.Parent = gui
-Instance.new("UICorner", mainWindow).CornerRadius = UDim.new(0, 14)
+function Visual.removeAllChams()
+    for char, h in pairs(Visual._chamsCache) do pcall(function() h:Destroy() end) end
+    Visual._chamsCache = {}
+end
 
-local mainGrad = Instance.new("UIGradient")
-mainGrad.Color = Visual.getAuroraSequence(os.clock())
-mainGrad.Rotation = 20
-mainGrad.Parent = mainWindow
-Visual._mainGrad = mainGrad
+function Visual.updateChams(targets, CFG)
+    if not CFG.ShowChams then
+        if Visual._chamsEnabled then Visual.removeAllChams(); Visual._chamsEnabled = false end
+        return
+    end
+    Visual._chamsEnabled = true
+    local activeChars = {}
+    for _, tg in ipairs(targets) do
+        if tg.char and tg.char.Parent then
+            activeChars[tg.char] = true
+            local col = Visual.getAuroraColor(os.clock(), 0)
+            local h = Visual._chamsCache[tg.char]
+            if h and h.Parent then
+                h.FillColor = col
+                h.OutlineColor = Visual.getAuroraColor(os.clock(), 1.5)
+                h.FillTransparency = CFG.ChamsFillTransparency or 0.65
+                h.OutlineTransparency = CFG.ChamsOutlineTransparency or 0.1
+            else
+                Visual.createChams(tg.char, col)
+            end
+        end
+    end
+    for char, h in pairs(Visual._chamsCache) do
+        if not activeChars[char] then pcall(function() h:Destroy() end); Visual._chamsCache[char] = nil end
+    end
+end
 
-local mainStroke = Instance.new("UIStroke")
-mainStroke.Thickness = 1.5
-mainStroke.Transparency = 0.08
-mainStroke.Parent = mainWindow
-local mainStrokeGrad = Instance.new("UIGradient")
-mainStrokeGrad.Parent = mainStroke
-Visual._gStGrad = mainStrokeGrad
-Visual.W = mainWindow
-Visual.gSt = mainStroke
+-- =============================================
+--          MAIN WINDOW
+-- =============================================
+local WIN_MODES = {{w=820,h=560},{w=620,h=430},{w=1060,h=660}}
+Visual.WIN_MODES = WIN_MODES
+function Visual.getWS(CFG)
+    local m = WIN_MODES[CFG.WindowMode] or WIN_MODES[1]
+    return m.w, m.h
+end
 
-local rageOverlay = Instance.new("Frame")
-rageOverlay.Size = UDim2.new(1, 0, 1, 0)
-rageOverlay.BackgroundColor3 = Color3.new(1, 1, 1)
-rageOverlay.BackgroundTransparency = 1
-rageOverlay.BorderSizePixel = 0
-rageOverlay.ZIndex = 10
-rageOverlay.Parent = mainWindow
-local rageOverlayGrad = Instance.new("UIGradient")
-rageOverlayGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 60, 90)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(180, 50, 150)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 120, 120)),
-})
-rageOverlayGrad.Rotation = 45
-rageOverlayGrad.Parent = rageOverlay
-Visual._rageOverlay = rageOverlay
+local wW, wH = 820, 560
 
-local stars = {}
-for i = 1, 24 do
-    local star = Instance.new("Frame")
-    local size = math.random(1, 2)
-    star.Size = UDim2.new(0, size, 0, size)
-    star.Position = UDim2.new(0, math.random(10, windowW - 10), 0, math.random(60, windowH - 10))
+local W = Instance.new("Frame", gui)
+W.Name = "W"
+W.Size = UDim2.new(0, wW, 0, wH)
+W.Position = UDim2.new(0.5, -wW/2, 0.5, -wH/2)
+W.BackgroundColor3 = Color3.fromRGB(8, 4, 14)
+W.BackgroundTransparency = 0.02
+W.BorderSizePixel = 0
+W.Visible = false
+W.ZIndex = 10
+W.ClipsDescendants = true
+Instance.new("UICorner", W).CornerRadius = UDim.new(0, 14)
+local gSt = Instance.new("UIStroke", W)
+gSt.Thickness = 1.5
+gSt.Transparency = 0.1
+local gStGrad = Instance.new("UIGradient", gSt)
+Visual._gStGrad = gStGrad
+Visual.W = W
+Visual.gSt = gSt
+
+local auroraBg = Instance.new("Frame", W)
+auroraBg.Size = UDim2.new(1, 0, 1, 0)
+auroraBg.BackgroundColor3 = Color3.new(1, 1, 1)
+auroraBg.BackgroundTransparency = 0.94
+auroraBg.BorderSizePixel = 0
+auroraBg.ZIndex = 10
+local auroraBgGrad = Instance.new("UIGradient", auroraBg)
+auroraBgGrad.Rotation = 25
+Visual._auroraBgGrad = auroraBgGrad
+
+local guiStars = {}
+for i = 1, 22 do
+    local star = Instance.new("Frame", W)
+    local sz = math.random(1, 2)
+    star.Size = UDim2.new(0, sz, 0, sz)
+    star.Position = UDim2.new(0, math.random(10, wW-10), 0, math.random(55, wH-10))
     star.BackgroundColor3 = Color3.fromRGB(200, 190, 255)
-    star.BackgroundTransparency = math.random(50, 80) / 100
+    star.BackgroundTransparency = math.random(50, 80)/100
     star.BorderSizePixel = 0
     star.ZIndex = 11
-    star.Parent = mainWindow
     Instance.new("UICorner", star).CornerRadius = UDim.new(1, 0)
-    stars[i] = star
+    guiStars[#guiStars+1] = star
 end
-Visual.guiStars = stars
+Visual.guiStars = guiStars
 
-local titleBar = Instance.new("Frame")
-titleBar.Size = UDim2.new(1, 0, 0, 48)
-titleBar.BackgroundColor3 = Color3.new(1, 1, 1)
-titleBar.BackgroundTransparency = 0.12
-titleBar.BorderSizePixel = 0
-titleBar.ZIndex = 12
-titleBar.Parent = mainWindow
-Instance.new("UICorner", titleBar).CornerRadius = UDim.new(0, 14)
-local titleBarGrad = Instance.new("UIGradient")
-titleBarGrad.Color = Visual.getAuroraSequence(os.clock())
-titleBarGrad.Rotation = 20
-titleBarGrad.Parent = titleBar
-Visual._titleBarGrad = titleBarGrad
-Visual.tB = titleBar
+-- =============================================
+--          TITLE BAR — FULL AURORA GRADIENT
+-- =============================================
+local tB = Instance.new("Frame", W)
+tB.Size = UDim2.new(1, 0, 0, 46)
+tB.BackgroundColor3 = Color3.new(1, 1, 1)
+tB.BackgroundTransparency = 0.88
+tB.BorderSizePixel = 0
+tB.ZIndex = 12
+Instance.new("UICorner", tB).CornerRadius = UDim.new(0, 14)
+local tBGrad = Instance.new("UIGradient", tB)
+Visual._tBGrad = tBGrad
+Visual.tB = tB
 
-local titleLine = Instance.new("Frame")
-titleLine.Size = UDim2.new(1, 0, 0, 2)
-titleLine.Position = UDim2.new(0, 0, 1, -2)
-titleLine.BackgroundColor3 = Color3.new(1, 1, 1)
-titleLine.BackgroundTransparency = 0.08
-titleLine.BorderSizePixel = 0
-titleLine.ZIndex = 14
-titleLine.Parent = titleBar
-local titleLineGrad = Instance.new("UIGradient")
-titleLineGrad.Parent = titleLine
-Visual._tLGrad = titleLineGrad
+local tL = Instance.new("Frame", tB)
+tL.Size = UDim2.new(1, 0, 0, 2)
+tL.Position = UDim2.new(0, 0, 1, -2)
+tL.BackgroundColor3 = Color3.new(1, 1, 1)
+tL.BackgroundTransparency = 0.1
+tL.BorderSizePixel = 0
+tL.ZIndex = 14
+local tLGrad = Instance.new("UIGradient", tL)
+Visual._tLGrad = tLGrad
 
-local moonButton = Instance.new("Frame")
-moonButton.Size = UDim2.new(0, 96, 0, 30)
-moonButton.Position = UDim2.new(0, 10, 0.5, -15)
-moonButton.BackgroundColor3 = Color3.new(1, 1, 1)
-moonButton.BackgroundTransparency = 0.08
-moonButton.BorderSizePixel = 0
-moonButton.ZIndex = 15
-moonButton.ClipsDescendants = true
-moonButton.Parent = titleBar
-Instance.new("UICorner", moonButton).CornerRadius = UDim.new(0, 8)
-local moonButtonGrad = Instance.new("UIGradient")
-moonButtonGrad.Color = Visual.getAuroraSequence(os.clock())
-moonButtonGrad.Parent = moonButton
-Visual._moonBtnGrad = moonButtonGrad
+local moonBtn = Instance.new("Frame", tB)
+moonBtn.Size = UDim2.new(0, 84, 0, 30)
+moonBtn.Position = UDim2.new(0, 10, 0.5, -15)
+moonBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+moonBtn.BackgroundTransparency = 0.12
+moonBtn.BorderSizePixel = 0
+moonBtn.ZIndex = 15
+moonBtn.ClipsDescendants = true
+Instance.new("UICorner", moonBtn).CornerRadius = UDim.new(0, 8)
+local moonBtnGrad = Instance.new("UIGradient", moonBtn)
+Visual._moonBtnGrad = moonBtnGrad
+local moonBtnTxt = Instance.new("TextLabel", moonBtn)
+moonBtnTxt.Size = UDim2.new(1, 0, 1, 0)
+moonBtnTxt.BackgroundTransparency = 1
+moonBtnTxt.Text = "MOON"
+moonBtnTxt.TextColor3 = Color3.new(1, 1, 1)
+moonBtnTxt.TextSize = 13
+moonBtnTxt.Font = Enum.Font.GothamBold
+moonBtnTxt.ZIndex = 16
 
-local moonButtonText = Instance.new("TextLabel")
-moonButtonText.Size = UDim2.new(1, 0, 1, 0)
-moonButtonText.BackgroundTransparency = 1
-moonButtonText.Text = "LUNA"
-moonButtonText.TextColor3 = Color3.new(1, 1, 1)
-moonButtonText.TextSize = 13
-moonButtonText.Font = Enum.Font.GothamBold
-moonButtonText.ZIndex = 16
-moonButtonText.Parent = moonButton
-local moonButtonTextGrad = Instance.new("UIGradient")
-moonButtonTextGrad.Color = Visual.getAuroraSequence(os.clock())
-moonButtonTextGrad.Parent = moonButtonText
-Visual._moonBtnTxtGrad = moonButtonTextGrad
-Visual.moonBtnTxt = moonButtonText
+local guiStatus = Instance.new("TextLabel", tB)
+guiStatus.Text = "OFF"
+guiStatus.Size = UDim2.new(0, 52, 0, 24)
+guiStatus.Position = UDim2.new(0, 104, 0.5, -12)
+guiStatus.BackgroundColor3 = Color3.new(1, 1, 1)
+guiStatus.BackgroundTransparency = 0.8
+guiStatus.TextSize = 10
+guiStatus.Font = Enum.Font.GothamBold
+guiStatus.BorderSizePixel = 0
+guiStatus.ZIndex = 15
+guiStatus.TextColor3 = Color3.new(1,1,1)
+Instance.new("UICorner", guiStatus).CornerRadius = UDim.new(0, 6)
+local guiStatusGrad = Instance.new("UIGradient", guiStatus)
+Visual._guiStatusGrad = guiStatusGrad
+Visual.guiStatus = guiStatus
 
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Text = "OFF"
-statusLabel.Size = UDim2.new(0, 62, 0, 24)
-statusLabel.Position = UDim2.new(0, 116, 0.5, -12)
-statusLabel.BackgroundColor3 = Color3.new(1, 1, 1)
-statusLabel.BackgroundTransparency = 0.08
-statusLabel.TextColor3 = Color3.new(1, 1, 1)
-statusLabel.TextSize = 10
-statusLabel.Font = Enum.Font.GothamBold
-statusLabel.BorderSizePixel = 0
-statusLabel.ZIndex = 15
-statusLabel.Parent = titleBar
-Instance.new("UICorner", statusLabel).CornerRadius = UDim.new(0, 6)
-local statusGrad = Instance.new("UIGradient")
-statusGrad.Color = Visual.getAuroraSequence(os.clock())
-statusGrad.Parent = statusLabel
-Visual._statusGrad = statusGrad
-Visual.guiStatus = statusLabel
+local guiFPS = Instance.new("TextLabel", tB)
+guiFPS.Text = "60 fps"
+guiFPS.Size = UDim2.new(0, 50, 0, 14)
+guiFPS.Position = UDim2.new(0, 168, 0.5, -7)
+guiFPS.BackgroundTransparency = 1
+guiFPS.TextSize = 9
+guiFPS.Font = Enum.Font.Code
+guiFPS.ZIndex = 15
+guiFPS.TextColor3 = Color3.new(1,1,1)
+local guiFPSGrad = Instance.new("UIGradient", guiFPS)
+Visual._guiFPSGrad = guiFPSGrad
+Visual.guiFPS = guiFPS
 
-local fpsLabel = Instance.new("TextLabel")
-fpsLabel.Text = "60"
-fpsLabel.Size = UDim2.new(0, 54, 0, 14)
-fpsLabel.Position = UDim2.new(0, 188, 0.5, -7)
-fpsLabel.BackgroundTransparency = 1
-fpsLabel.TextColor3 = Color3.new(1, 1, 1)
-fpsLabel.TextSize = 9
-fpsLabel.Font = Enum.Font.Code
-fpsLabel.ZIndex = 15
-fpsLabel.Parent = titleBar
-local fpsGrad = Instance.new("UIGradient")
-fpsGrad.Color = Visual.getAuroraSequence(os.clock())
-fpsGrad.Parent = fpsLabel
-Visual._fpsGrad = fpsGrad
-Visual.guiFPS = fpsLabel
+local guiKills = Instance.new("TextLabel", tB)
+guiKills.Text = "0 kills"
+guiKills.Size = UDim2.new(0, 55, 0, 14)
+guiKills.Position = UDim2.new(0, 220, 0.5, -7)
+guiKills.BackgroundTransparency = 1
+guiKills.TextSize = 9
+guiKills.Font = Enum.Font.Code
+guiKills.ZIndex = 15
+guiKills.TextColor3 = Color3.new(1,1,1)
+local guiKillsGrad = Instance.new("UIGradient", guiKills)
+Visual._guiKillsGrad = guiKillsGrad
+Visual.guiKills = guiKills
 
-local killsLabel = Instance.new("TextLabel")
-killsLabel.Text = "0 kills"
-killsLabel.Size = UDim2.new(0, 60, 0, 14)
-killsLabel.Position = UDim2.new(0, 246, 0.5, -7)
-killsLabel.BackgroundTransparency = 1
-killsLabel.TextColor3 = Color3.new(1, 1, 1)
-killsLabel.TextSize = 9
-killsLabel.Font = Enum.Font.Code
-killsLabel.ZIndex = 15
-killsLabel.Parent = titleBar
-local killsGrad = Instance.new("UIGradient")
-killsGrad.Color = Visual.getAuroraSequence(os.clock())
-killsGrad.Parent = killsLabel
-Visual._killsGrad = killsGrad
-Visual.guiKills = killsLabel
-
-local rageButton = Instance.new("TextButton")
-rageButton.Size = UDim2.new(0, 98, 0, 28)
-rageButton.Position = UDim2.new(0, 18, 1, -50)
-rageButton.BackgroundColor3 = Color3.new(1, 1, 1)
-rageButton.BackgroundTransparency = 0.08
-rageButton.Text = "RAGE"
-rageButton.TextColor3 = Color3.new(1, 1, 1)
-rageButton.TextSize = 11
-rageButton.Font = Enum.Font.GothamBold
-rageButton.BorderSizePixel = 0
-rageButton.ZIndex = 50
-rageButton.Visible = true
-rageButton.AutoButtonColor = false
-rageButton.ClipsDescendants = true
-rageButton.Parent = gui
-Instance.new("UICorner", rageButton).CornerRadius = UDim.new(0, 8)
-local rageButtonGrad = Instance.new("UIGradient")
-rageButtonGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 60, 90)),
-    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(180, 50, 150)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 120, 120)),
-})
-rageButtonGrad.Rotation = 20
-rageButtonGrad.Parent = rageButton
-Visual.rageBtn = rageButton
-Visual._rageBtnGrad = rageButtonGrad
-
-local minimized = false
+local isMin = false
 Visual._dragState = {drag = false, start = nil, pos = nil}
-Visual._onClose = nil
-Visual._onRageToggle = nil
 
-local function makeTitleButton(text, xOffset, callback)
-    local button = Instance.new("TextButton")
-    button.Text = text
-    button.Size = UDim2.new(0, 32, 0, 26)
-    button.Position = UDim2.new(1, xOffset, 0.5, -13)
-    button.BackgroundColor3 = Color3.new(1, 1, 1)
-    button.BackgroundTransparency = 0.08
-    button.TextColor3 = Color3.new(1, 1, 1)
-    button.TextSize = 13
-    button.Font = Enum.Font.GothamBold
-    button.BorderSizePixel = 0
-    button.ZIndex = 16
-    button.ClipsDescendants = true
-    button.AutoButtonColor = false
-    button.Parent = titleBar
-    Instance.new("UICorner", button).CornerRadius = UDim.new(0, 7)
-    local grad = Instance.new("UIGradient")
-    grad.Color = Visual.getAuroraSequence(os.clock())
-    grad.Parent = button
-
-    button.MouseEnter:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundTransparency = 0.0}):Play()
+local function mkTBtn(tx, xO, cb)
+    local b = Instance.new("TextButton", tB)
+    b.Text = tx
+    b.Size = UDim2.new(0, 34, 0, 28)
+    b.Position = UDim2.new(1, xO, 0.5, -14)
+    b.BackgroundColor3 = Color3.new(1,1,1)
+    b.BackgroundTransparency = 0.85
+    b.TextColor3 = Color3.new(1,1,1)
+    b.TextSize = 13
+    b.Font = Enum.Font.GothamBold
+    b.BorderSizePixel = 0
+    b.ZIndex = 16
+    b.ClipsDescendants = true
+    b.AutoButtonColor = false
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 7)
+    local bG = Instance.new("UIGradient", b)
+    bG.Color = Visual.getAuroraSequence(os.clock())
+    b.MouseEnter:Connect(function() TS:Create(b, TweenInfo.new(0.2), {BackgroundTransparency = 0.5}):Play() end)
+    b.MouseLeave:Connect(function() TS:Create(b, TweenInfo.new(0.2), {BackgroundTransparency = 0.85}):Play() end)
+    b.MouseButton1Click:Connect(function()
+        Visual.playSound(SoundIDs.ButtonClick, 0.2, 1.2)
+        Visual.Ripple(b, b.AbsoluteSize.X/2, b.AbsoluteSize.Y/2)
+        if cb then cb() end
     end)
-    button.MouseLeave:Connect(function()
-        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundTransparency = 0.08}):Play()
-    end)
-    button.MouseButton1Click:Connect(function()
-        Visual.PlaySound("Click", 0.25, 1)
-        Visual.Ripple(button, button.AbsoluteSize.X / 2, button.AbsoluteSize.Y / 2)
-        if callback then
-            callback()
-        end
-    end)
-
-    return button, grad
+    return b, bG
 end
 
-local closeButton, closeButtonGrad = makeTitleButton("×", -38, function()
-    if Visual._onClose then
-        Visual._onClose()
-    end
+Visual._onClose = nil
+local closeBtn, closeBtnG = mkTBtn("×", -40, function() if Visual._onClose then Visual._onClose() end end)
+Visual._closeBtn = closeBtn; Visual._closeBtnG = closeBtnG
+local minBtn, minBtnG = mkTBtn("—", -78, function()
+    isMin = not isMin
+    TS:Create(W, TweenInfo.new(0.4, Enum.EasingStyle.Quint), {Size = isMin and UDim2.new(0, wW, 0, 46) or UDim2.new(0, wW, 0, wH)}):Play()
 end)
-Visual._closeBtn = closeButton
-Visual._closeBtnG = closeButtonGrad
+Visual._minBtnG = minBtnG
 
-local minimizeButton, minimizeButtonGrad = makeTitleButton("—", -74, function()
-    minimized = not minimized
-    TweenService:Create(mainWindow, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {
-        Size = minimized and UDim2.new(0, windowW, 0, 48) or UDim2.new(0, windowW, 0, windowH)
-    }):Play()
-end)
-Visual._minBtnG = minimizeButtonGrad
+tB.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then Visual._dragState = {drag=true, start=i.Position, pos=W.Position} end end)
+tB.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then Visual._dragState.drag = false end end)
 
-rageButton.MouseEnter:Connect(function()
-    TweenService:Create(rageButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.0}):Play()
-end)
-rageButton.MouseLeave:Connect(function()
-    TweenService:Create(rageButton, TweenInfo.new(0.2), {BackgroundTransparency = 0.08}):Play()
-end)
-rageButton.MouseButton1Click:Connect(function()
-    Visual.PlaySound("Rage", 0.28, 1)
-    Visual.Ripple(rageButton, rageButton.AbsoluteSize.X / 2, rageButton.AbsoluteSize.Y / 2)
-    if Visual._onRageToggle then
-        Visual._onRageToggle()
-    end
-end)
-
-titleBar.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        Visual._dragState.drag = true
-        Visual._dragState.start = input.Position
-        Visual._dragState.pos = mainWindow.Position
-    end
-end)
-titleBar.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        Visual._dragState.drag = false
-    end
-end)
-
-local body = Instance.new("Frame")
-body.Size = UDim2.new(1, 0, 1, -48)
-body.Position = UDim2.new(0, 0, 0, 48)
+-- =============================================
+--          TAB SYSTEM — DYNAMIC (COMBAT/VISUAL + RAGE REBUILD)
+-- =============================================
+local body = Instance.new("Frame", W)
+body.Size = UDim2.new(1, 0, 1, -46)
+body.Position = UDim2.new(0, 0, 0, 46)
 body.BackgroundTransparency = 1
 body.BorderSizePixel = 0
 body.ZIndex = 11
-body.Parent = mainWindow
 
-local tabBar = Instance.new("Frame")
-tabBar.Size = UDim2.new(1, 0, 0, 36)
-tabBar.BackgroundColor3 = Color3.new(1, 1, 1)
-tabBar.BackgroundTransparency = 0.12
+local tabBar = Instance.new("Frame", body)
+tabBar.Size = UDim2.new(1, 0, 0, 38)
+tabBar.BackgroundColor3 = Color3.fromRGB(4, 2, 10)
+tabBar.BackgroundTransparency = 0.15
 tabBar.BorderSizePixel = 0
 tabBar.ZIndex = 13
-tabBar.Parent = body
-local tabBarGrad = Instance.new("UIGradient")
-tabBarGrad.Color = Visual.getAuroraSequence(os.clock())
-tabBarGrad.Rotation = 10
-tabBarGrad.Parent = tabBar
-Visual._tabBarGrad = tabBarGrad
 
-local tabIndicator = Instance.new("Frame")
-tabIndicator.Size = UDim2.new(0, 0, 0, 2)
-tabIndicator.Position = UDim2.new(0, 0, 1, -2)
-tabIndicator.BackgroundColor3 = Color3.new(1, 1, 1)
-tabIndicator.BorderSizePixel = 0
-tabIndicator.ZIndex = 15
-tabIndicator.Parent = tabBar
-local tabIndicatorGrad = Instance.new("UIGradient")
-tabIndicatorGrad.Parent = tabIndicator
-Visual._tabIndGrad = tabIndicatorGrad
-Visual.tabInd = tabIndicator
+local tabInd = Instance.new("Frame", tabBar)
+tabInd.Size = UDim2.new(0, 0, 0, 2)
+tabInd.Position = UDim2.new(0, 0, 1, -2)
+tabInd.BackgroundColor3 = Color3.new(1,1,1)
+tabInd.BorderSizePixel = 0
+tabInd.ZIndex = 15
+local tabIndGrad = Instance.new("UIGradient", tabInd)
+Visual._tabIndGrad = tabIndGrad
+Visual.tabInd = tabInd
 
-local tabContainer = Instance.new("Frame")
-tabContainer.Size = UDim2.new(1, 0, 1, -36)
-tabContainer.Position = UDim2.new(0, 0, 0, 36)
-tabContainer.BackgroundTransparency = 1
-tabContainer.BorderSizePixel = 0
-tabContainer.ZIndex = 12
-tabContainer.Parent = body
+local tabCon = Instance.new("Frame", body)
+tabCon.Size = UDim2.new(1, 0, 1, -38)
+tabCon.Position = UDim2.new(0, 0, 0, 38)
+tabCon.BackgroundTransparency = 1
+tabCon.BorderSizePixel = 0
+tabCon.ZIndex = 12
 
-Visual.NormalTabs = {"Combat", "Visual", "Binds", "Cfg", "Patch"}
-Visual.RageTabs = {"Combat", "Visual", "Target", "Binds", "Cfg", "Patch"}
+Visual._rageMode = false
 
-local tabButtons = {}
-local tabPages = {}
-local pageOrders = {}
-local activeTab = 1
-local currentTabs = {}
-local isRageMode = false
+local TN_NORMAL = {"Aim", "Trig", "ESP", "Visual", "Binds", "Cfg", "Patch"}
+local TN_RAGE = {"Aim", "Trig", "Target", "ESP", "Visual", "Binds", "Cfg", "Patch"}
 
-for i = 1, 6 do
-    local page = Instance.new("ScrollingFrame")
-    page.Name = "P" .. i
-    page.Size = UDim2.new(1, 0, 1, 0)
-    page.BackgroundTransparency = 1
-    page.ScrollBarThickness = 3
-    page.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
-    page.ScrollBarImageTransparency = 0.35
-    page.CanvasSize = UDim2.new(0, 0, 0, 0)
-    page.BorderSizePixel = 0
-    page.Visible = false
-    page.ZIndex = 13
-    page.ScrollingDirection = Enum.ScrollingDirection.Y
-    page.Parent = tabContainer
+Visual.TabNames = TN_NORMAL
+local tBs, tPs = {}, {}
+local aTab = 1
+local allTabPages = {}
 
-    local layout = Instance.new("UIListLayout")
-    layout.Padding = UDim.new(0, 4)
-    layout.SortOrder = Enum.SortOrder.LayoutOrder
-    layout.Parent = page
-    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+local function createTabPage(parent, idx)
+    local pg = Instance.new("ScrollingFrame", parent)
+    pg.Name = "P" .. idx
+    pg.Size = UDim2.new(1, 0, 1, 0)
+    pg.BackgroundTransparency = 1
+    pg.ScrollBarThickness = 3
+    pg.ScrollBarImageColor3 = Color3.fromRGB(80, 50, 160)
+    pg.ScrollBarImageTransparency = 0.5
+    pg.CanvasSize = UDim2.new(0, 0, 0, 0)
+    pg.BorderSizePixel = 0
+    pg.Visible = false
+    pg.ZIndex = 13
+    pg.ScrollingDirection = Enum.ScrollingDirection.Y
+    local ll = Instance.new("UIListLayout", pg)
+    ll.Padding = UDim.new(0, 4)
+    ll.SortOrder = Enum.SortOrder.LayoutOrder
+    ll:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        pg.CanvasSize = UDim2.new(0, 0, 0, ll.AbsoluteContentSize.Y + 24)
     end)
-
-    local padding = Instance.new("UIPadding")
-    padding.PaddingTop = UDim.new(0, 10)
-    padding.PaddingLeft = UDim.new(0, 16)
-    padding.PaddingRight = UDim.new(0, 16)
-    padding.PaddingBottom = UDim.new(0, 16)
-    padding.Parent = page
-
-    tabPages[i] = page
-    pageOrders[i] = 0
+    local pd = Instance.new("UIPadding", pg)
+    pd.PaddingTop = UDim.new(0, 10)
+    pd.PaddingLeft = UDim.new(0, 16)
+    pd.PaddingRight = UDim.new(0, 16)
+    pd.PaddingBottom = UDim.new(0, 16)
+    return pg
 end
 
-local function nextOrder(pageIndex)
-    pageOrders[pageIndex] = pageOrders[pageIndex] + 1
-    return pageOrders[pageIndex]
+for i = 1, 10 do
+    local pg = createTabPage(tabCon, i)
+    allTabPages[i] = pg
 end
 
+local function rebuildTabs(tabNames)
+    for _, b in ipairs(tBs) do pcall(function() b:Destroy() end) end
+    tBs = {}
+    tPs = {}
+    Visual.TabNames = tabNames
+
+    local tbw2 = math.floor(wW / #tabNames)
+    for i, nm in ipairs(tabNames) do
+        tPs[i] = allTabPages[i]
+        allTabPages[i].Visible = (i == 1)
+
+        local b = Instance.new("TextButton", tabBar)
+        b.Text = nm
+        b.Size = UDim2.new(0, tbw2, 1, 0)
+        b.Position = UDim2.new(0, (i-1)*tbw2, 0, 0)
+        b.BackgroundTransparency = 1
+        b.TextColor3 = i==1 and Color3.new(1,1,1) or Color3.fromRGB(100, 90, 130)
+        b.TextSize = 11
+        b.Font = Enum.Font.GothamBold
+        b.BorderSizePixel = 0
+        b.AutoButtonColor = false
+        b.ZIndex = 15
+        b.MouseEnter:Connect(function()
+            if aTab ~= i then TS:Create(b, TweenInfo.new(0.15), {TextColor3 = Color3.fromRGB(200, 190, 240)}):Play() end
+        end)
+        b.MouseLeave:Connect(function()
+            if aTab ~= i then TS:Create(b, TweenInfo.new(0.15), {TextColor3 = Color3.fromRGB(100, 90, 130)}):Play() end
+        end)
+        b.MouseButton1Click:Connect(function() Visual.switchTab(i) end)
+        tBs[i] = b
+    end
+
+    aTab = 1
+    tabInd.Size = UDim2.new(0, tbw2-16, 0, 2)
+    tabInd.Position = UDim2.new(0, 8, 1, -2)
+    Visual.tBs = tBs
+    Visual.tPs = tPs
+end
+
+function Visual.switchTab(idx)
+    if idx == aTab and tPs[idx] and tPs[idx].Visible then return end
+    Visual.playSound(SoundIDs.TabSwitch, 0.15, 1.0)
+    aTab = idx
+    local tbw2 = math.floor(wW / #Visual.TabNames)
+    for i, b in ipairs(tBs) do
+        TS:Create(b, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {TextColor3 = (i==idx) and Color3.new(1,1,1) or Color3.fromRGB(100, 90, 130)}):Play()
+        if tPs[i] then tPs[i].Visible = (i == idx) end
+    end
+    TS:Create(tabInd, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {
+        Position = UDim2.new(0, (idx-1)*tbw2+8, 1, -2),
+        Size = UDim2.new(0, tbw2-16, 0, 2)
+    }):Play()
+end
+
+rebuildTabs(TN_NORMAL)
+
+-- =============================================
+--          UI BUILDERS
+-- =============================================
+local pO = {}
+for i = 1, 10 do pO[i] = 0 end
+local function po(pi) pO[pi] = pO[pi] + 1; return pO[pi] end
 Visual.themeCallbacks = {}
-Visual._uiSoundsEnabled = true
 
-local function bindClick(button, soundType)
-    button.MouseButton1Click:Connect(function()
-        if Visual._uiSoundsEnabled then
-            Visual.PlaySound(soundType or "Click", 0.22, 1)
-        end
+function Visual.makeSection(pi, tx, C)
+    local f = Instance.new("Frame", allTabPages[pi])
+    f.Size = UDim2.new(1, -4, 0, 26)
+    f.BackgroundTransparency = 1
+    f.LayoutOrder = po(pi)
+    f.ZIndex = 18
+    local l = Instance.new("TextLabel", f)
+    l.Text = string.upper(tx)
+    l.Size = UDim2.new(1, 0, 1, 0)
+    l.BackgroundTransparency = 1
+    l.TextSize = 10
+    l.Font = Enum.Font.GothamBold
+    l.TextXAlignment = Enum.TextXAlignment.Left
+    l.ZIndex = 20
+    l.TextColor3 = Color3.new(1,1,1)
+    local lG = Instance.new("UIGradient", l)
+    lG.Color = Visual.getAuroraSequence(os.clock())
+    local ln = Instance.new("Frame", f)
+    ln.Size = UDim2.new(1, 0, 0, 1)
+    ln.Position = UDim2.new(0, 0, 1, -1)
+    ln.BackgroundColor3 = Color3.new(1,1,1)
+    ln.BackgroundTransparency = 0.55
+    ln.BorderSizePixel = 0
+    ln.ZIndex = 20
+    local lnG = Instance.new("UIGradient", ln)
+    lnG.Color = Visual.getAuroraSequence(os.clock())
+    table.insert(Visual.themeCallbacks, function()
+        pcall(function() lG.Color = Visual.getAuroraSequence(os.clock()); lnG.Color = Visual.getAuroraSequence(os.clock()) end)
     end)
 end
 
-function Visual.getMappedPage(tabIndex, rageMode)
-    if rageMode then
-        return tabIndex
+function Visual.makeToggle(pi, tx, k, CFG, C, cb)
+    local rw = Instance.new("Frame", allTabPages[pi])
+    rw.Size = UDim2.new(1, -4, 0, 36)
+    rw.BackgroundColor3 = Color3.fromRGB(12, 7, 22)
+    rw.BackgroundTransparency = 0.4
+    rw.BorderSizePixel = 0
+    rw.ZIndex = 18
+    rw.LayoutOrder = po(pi)
+    rw.ClipsDescendants = true
+    Instance.new("UICorner", rw).CornerRadius = UDim.new(0, 8)
+    local tl = Instance.new("TextLabel", rw)
+    tl.Text = tx
+    tl.Size = UDim2.new(1, -56, 1, 0)
+    tl.Position = UDim2.new(0, 12, 0, 0)
+    tl.BackgroundTransparency = 1
+    tl.TextSize = 11
+    tl.Font = Enum.Font.GothamSemibold
+    tl.TextXAlignment = Enum.TextXAlignment.Left
+    tl.ZIndex = 20
+    tl.TextColor3 = Color3.new(1,1,1)
+    local tlGrad = Instance.new("UIGradient", tl)
+    tlGrad.Color = Visual.getAuroraSequence(os.clock())
+    local pl = Instance.new("Frame", rw)
+    pl.Size = UDim2.new(0, 40, 0, 20)
+    pl.Position = UDim2.new(1, -48, 0.5, -10)
+    pl.BackgroundColor3 = Color3.new(1,1,1)
+    pl.BackgroundTransparency = CFG[k] and 0.12 or 0.82
+    pl.BorderSizePixel = 0
+    pl.ZIndex = 20
+    Instance.new("UICorner", pl).CornerRadius = UDim.new(1, 0)
+    local plG = Instance.new("UIGradient", pl)
+    plG.Color = Visual.getAuroraSequence(os.clock())
+    local kb = Instance.new("Frame", pl)
+    kb.Size = UDim2.new(0, 14, 0, 14)
+    kb.Position = CFG[k] and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
+    kb.BackgroundColor3 = Color3.new(1,1,1)
+    kb.BorderSizePixel = 0
+    kb.ZIndex = 21
+    Instance.new("UICorner", kb).CornerRadius = UDim.new(1, 0)
+    rw.MouseEnter:Connect(function() TS:Create(rw, TweenInfo.new(0.15), {BackgroundTransparency = 0.2}):Play() end)
+    rw.MouseLeave:Connect(function() TS:Create(rw, TweenInfo.new(0.15), {BackgroundTransparency = 0.4}):Play() end)
+    local bn = Instance.new("TextButton", rw)
+    bn.Size = UDim2.new(1, 0, 1, 0)
+    bn.BackgroundTransparency = 1
+    bn.Text = ""
+    bn.ZIndex = 22
+    bn.AutoButtonColor = false
+    bn.MouseButton1Click:Connect(function()
+        CFG[k] = not CFG[k]
+        local on = CFG[k]
+        Visual.playSound(on and SoundIDs.ToggleOn or SoundIDs.ToggleOff, 0.25, on and 1.1 or 0.9)
+        local mx = UIS:GetMouseLocation()
+        Visual.Ripple(rw, mx.X - rw.AbsolutePosition.X, mx.Y - rw.AbsolutePosition.Y)
+        TS:Create(pl, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {BackgroundTransparency = on and 0.12 or 0.82}):Play()
+        TS:Create(kb, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {Position = on and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)}):Play()
+        if cb then cb(on) end
+    end)
+    table.insert(Visual.themeCallbacks, function()
+        pcall(function() plG.Color = Visual.getAuroraSequence(os.clock()); tlGrad.Color = Visual.getAuroraSequence(os.clock()) end)
+    end)
+end
+
+function Visual.makeSlider(pi, tx, k, mn, mx, st, CFG, C, allConnections)
+    allConnections = allConnections or {}
+    local rw = Instance.new("Frame", allTabPages[pi])
+    rw.Size = UDim2.new(1, -4, 0, 42)
+    rw.BackgroundTransparency = 1
+    rw.ZIndex = 18
+    rw.LayoutOrder = po(pi)
+    local ll = Instance.new("TextLabel", rw)
+    ll.Text = tx; ll.Size = UDim2.new(0.55, 0, 0, 14); ll.BackgroundTransparency = 1; ll.TextSize = 10; ll.Font = Enum.Font.Gotham; ll.TextXAlignment = Enum.TextXAlignment.Left; ll.ZIndex = 20; ll.TextColor3 = Color3.new(1,1,1)
+    local llG = Instance.new("UIGradient", ll); llG.Color = Visual.getAuroraSequence(os.clock())
+    local vl = Instance.new("TextLabel", rw)
+    vl.Text = st < 1 and string.format("%.2f", CFG[k]) or tostring(math.floor(CFG[k]))
+    vl.Size = UDim2.new(0.43, 0, 0, 14); vl.Position = UDim2.new(0.55, 0, 0, 0); vl.BackgroundTransparency = 1; vl.TextSize = 11; vl.Font = Enum.Font.GothamBold; vl.TextXAlignment = Enum.TextXAlignment.Right; vl.ZIndex = 20; vl.TextColor3 = Color3.new(1,1,1)
+    local vlG = Instance.new("UIGradient", vl); vlG.Color = Visual.getAuroraSequence(os.clock())
+    local tr = Instance.new("Frame", rw)
+    tr.Size = UDim2.new(1, 0, 0, 6); tr.Position = UDim2.new(0, 0, 0, 24); tr.BackgroundColor3 = Color3.fromRGB(20, 12, 35); tr.BackgroundTransparency = 0.15; tr.BorderSizePixel = 0; tr.ZIndex = 20
+    Instance.new("UICorner", tr).CornerRadius = UDim.new(0, 3)
+    local pc = math.clamp((CFG[k] - mn) / (mx - mn), 0, 1)
+    local fl = Instance.new("Frame", tr)
+    fl.Size = UDim2.new(pc, 0, 1, 0); fl.BackgroundColor3 = Color3.new(1,1,1); fl.BorderSizePixel = 0; fl.ZIndex = 21
+    Instance.new("UICorner", fl).CornerRadius = UDim.new(0, 3)
+    local flG = Instance.new("UIGradient", fl); flG.Color = Visual.getAuroraSequence(os.clock())
+    local kn = Instance.new("TextButton", tr)
+    kn.Size = UDim2.new(0, 16, 0, 16); kn.AnchorPoint = Vector2.new(0.5, 0.5); kn.Position = UDim2.new(pc, 0, 0.5, 0); kn.BackgroundColor3 = Color3.new(1,1,1); kn.Text = ""; kn.AutoButtonColor = false; kn.BorderSizePixel = 0; kn.ZIndex = 23
+    Instance.new("UICorner", kn).CornerRadius = UDim.new(1, 0)
+    local knG = Instance.new("UIGradient", kn); knG.Color = Visual.getAuroraSequence(os.clock())
+    table.insert(Visual.themeCallbacks, function() pcall(function() flG.Color = Visual.getAuroraSequence(os.clock()); knG.Color = Visual.getAuroraSequence(os.clock()); llG.Color = Visual.getAuroraSequence(os.clock()); vlG.Color = Visual.getAuroraSequence(os.clock()) end) end)
+    local iD = false
+    local function sV(v)
+        if st > 0 then v = math.floor(v / st + 0.5) * st end
+        v = math.clamp(v, mn, mx); CFG[k] = v
+        local p = math.clamp((v - mn) / (mx - mn), 0, 1)
+        fl.Size = UDim2.new(p, 0, 1, 0); kn.Position = UDim2.new(p, 0, 0.5, 0)
+        vl.Text = st < 1 and string.format("%.2f", v) or tostring(math.floor(v))
     end
-    if tabIndex <= 2 then
-        return tabIndex
-    elseif tabIndex == 3 then
-        return 4
-    elseif tabIndex == 4 then
-        return 5
+    kn.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then iD = true end end)
+    table.insert(allConnections, UIS.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 and iD then iD = false end end))
+    table.insert(allConnections, UIS.InputChanged:Connect(function(i)
+        if iD and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local w = tr.AbsoluteSize.X; if w > 0 then sV(mn + math.clamp((i.Position.X - tr.AbsolutePosition.X) / w, 0, 1) * (mx - mn)) end
+        end
+    end))
+    tr.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then local w = tr.AbsoluteSize.X; if w > 0 then sV(mn + math.clamp((i.Position.X - tr.AbsolutePosition.X) / w, 0, 1) * (mx - mn)) end end end)
+end
+
+function Visual.makeCycle(pi, tx, opts, k, CFG, C, cb)
+    local idx = CFG[k] or 1
+    local rw = Instance.new("Frame", allTabPages[pi])
+    rw.Size = UDim2.new(1, -4, 0, 36); rw.BackgroundColor3 = Color3.fromRGB(12, 7, 22); rw.BackgroundTransparency = 0.4; rw.BorderSizePixel = 0; rw.ZIndex = 18; rw.LayoutOrder = po(pi); rw.ClipsDescendants = true
+    Instance.new("UICorner", rw).CornerRadius = UDim.new(0, 8)
+    local ll = Instance.new("TextLabel", rw)
+    ll.Text = tx; ll.Size = UDim2.new(0.5, 0, 1, 0); ll.Position = UDim2.new(0, 12, 0, 0); ll.BackgroundTransparency = 1; ll.TextSize = 11; ll.Font = Enum.Font.GothamSemibold; ll.TextXAlignment = Enum.TextXAlignment.Left; ll.ZIndex = 20; ll.TextColor3 = Color3.new(1,1,1)
+    local llG = Instance.new("UIGradient", ll); llG.Color = Visual.getAuroraSequence(os.clock())
+    local rl = Instance.new("TextLabel", rw)
+    rl.Text = tostring(opts[idx]); rl.Size = UDim2.new(0.42, 0, 1, 0); rl.Position = UDim2.new(0.5, 0, 0, 0); rl.BackgroundTransparency = 1; rl.TextSize = 11; rl.Font = Enum.Font.GothamBold; rl.TextXAlignment = Enum.TextXAlignment.Right; rl.ZIndex = 20; rl.TextColor3 = Color3.new(1,1,1)
+    local rlG = Instance.new("UIGradient", rl); rlG.Color = Visual.getAuroraSequence(os.clock())
+    rw.MouseEnter:Connect(function() TS:Create(rw, TweenInfo.new(0.15), {BackgroundTransparency = 0.2}):Play() end)
+    rw.MouseLeave:Connect(function() TS:Create(rw, TweenInfo.new(0.15), {BackgroundTransparency = 0.4}):Play() end)
+    local bn = Instance.new("TextButton", rw); bn.Size = UDim2.new(1, 0, 1, 0); bn.BackgroundTransparency = 1; bn.Text = ""; bn.ZIndex = 22; bn.AutoButtonColor = false
+    bn.MouseButton1Click:Connect(function()
+        Visual.playSound(SoundIDs.ButtonClick, 0.2, 1.0)
+        local mx2 = UIS:GetMouseLocation(); Visual.Ripple(rw, mx2.X - rw.AbsolutePosition.X, mx2.Y - rw.AbsolutePosition.Y)
+        idx = idx % #opts + 1; CFG[k] = idx; rl.Text = tostring(opts[idx])
+        if cb then cb(idx) end
+    end)
+    table.insert(Visual.themeCallbacks, function() pcall(function() llG.Color = Visual.getAuroraSequence(os.clock()); rlG.Color = Visual.getAuroraSequence(os.clock()) end) end)
+end
+
+function Visual.makeRebind(pi, lb, ck, CFG, C, allConnections)
+    allConnections = allConnections or {}
+    local rw = Instance.new("Frame", allTabPages[pi])
+    rw.Size = UDim2.new(1, -4, 0, 36); rw.BackgroundColor3 = Color3.fromRGB(12, 7, 22); rw.BackgroundTransparency = 0.4; rw.BorderSizePixel = 0; rw.ZIndex = 18; rw.LayoutOrder = po(pi); rw.ClipsDescendants = true
+    Instance.new("UICorner", rw).CornerRadius = UDim.new(0, 8)
+    local ll = Instance.new("TextLabel", rw); ll.Text = lb; ll.Size = UDim2.new(0.5, 0, 1, 0); ll.Position = UDim2.new(0, 12, 0, 0); ll.BackgroundTransparency = 1; ll.TextSize = 11; ll.Font = Enum.Font.GothamSemibold; ll.TextXAlignment = Enum.TextXAlignment.Left; ll.ZIndex = 20; ll.TextColor3 = Color3.new(1,1,1)
+    local llG = Instance.new("UIGradient", ll); llG.Color = Visual.getAuroraSequence(os.clock())
+    local vl = Instance.new("TextLabel", rw); vl.Text = "[ "..CFG[ck].." ]"; vl.Size = UDim2.new(0.44, 0, 1, 0); vl.Position = UDim2.new(0.5, 0, 0, 0); vl.BackgroundTransparency = 1; vl.TextSize = 12; vl.Font = Enum.Font.GothamBold; vl.TextXAlignment = Enum.TextXAlignment.Right; vl.ZIndex = 20; vl.TextColor3 = Color3.new(1,1,1)
+    local vlG = Instance.new("UIGradient", vl); vlG.Color = Visual.getAuroraSequence(os.clock())
+    rw.MouseEnter:Connect(function() TS:Create(rw, TweenInfo.new(0.15), {BackgroundTransparency = 0.2}):Play() end)
+    rw.MouseLeave:Connect(function() TS:Create(rw, TweenInfo.new(0.15), {BackgroundTransparency = 0.4}):Play() end)
+    local rebinding = false
+    local bn = Instance.new("TextButton", rw); bn.Size = UDim2.new(1, 0, 1, 0); bn.BackgroundTransparency = 1; bn.Text = ""; bn.ZIndex = 22; bn.AutoButtonColor = false
+    bn.MouseButton1Click:Connect(function()
+        Visual.playSound(SoundIDs.ButtonClick, 0.2, 1.0)
+        Visual.Ripple(rw, rw.AbsoluteSize.X/2, rw.AbsoluteSize.Y/2)
+        vl.Text = "..."; rebinding = true
+        local cn; cn = UIS.InputBegan:Connect(function(inp)
+            if inp.UserInputType == Enum.UserInputType.Keyboard then
+                local n = inp.KeyCode.Name
+                if n ~= "Unknown" then CFG[ck] = n; vl.Text = "[ "..n.." ]"; rebinding = false; pcall(function() cn:Disconnect() end); Visual.playSound(SoundIDs.ToggleOn, 0.2, 1.3) end
+            end
+        end)
+        task.delay(5, function() if rebinding then rebinding = false; vl.Text = "[ "..CFG[ck].." ]"; pcall(function() cn:Disconnect() end) end end)
+    end)
+    table.insert(Visual.themeCallbacks, function() pcall(function() llG.Color = Visual.getAuroraSequence(os.clock()); vlG.Color = Visual.getAuroraSequence(os.clock()) end) end)
+end
+
+function Visual.makeInfo(pi, tx, C)
+    local l = Instance.new("TextLabel", allTabPages[pi])
+    l.Size = UDim2.new(1, -4, 0, 14); l.BackgroundTransparency = 1; l.Text = tx; l.TextSize = 9; l.Font = Enum.Font.Code; l.TextXAlignment = Enum.TextXAlignment.Left; l.ZIndex = 20; l.LayoutOrder = po(pi); l.TextColor3 = Color3.new(1,1,1)
+    local lG = Instance.new("UIGradient", l); lG.Color = Visual.getAuroraSequence(os.clock())
+    table.insert(Visual.themeCallbacks, function() pcall(function() lG.Color = Visual.getAuroraSequence(os.clock()) end) end)
+end
+
+function Visual.makeLabel(pi, C)
+    local lbl = Instance.new("TextLabel", allTabPages[pi])
+    lbl.Text = ""; lbl.Size = UDim2.new(1, -8, 0, 16); lbl.BackgroundTransparency = 1; lbl.TextSize = 12; lbl.Font = Enum.Font.GothamBold; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.ZIndex = 20; lbl.LayoutOrder = po(pi); lbl.TextColor3 = Color3.new(1,1,1)
+    local lblG = Instance.new("UIGradient", lbl); lblG.Color = Visual.getAuroraSequence(os.clock())
+    table.insert(Visual.themeCallbacks, function() pcall(function() lblG.Color = Visual.getAuroraSequence(os.clock()) end) end)
+    return lbl
+end
+
+function Visual.makeButton(pi, tx, C, cb)
+    local rw = Instance.new("Frame", allTabPages[pi])
+    rw.Size = UDim2.new(1, -4, 0, 36); rw.BackgroundColor3 = Color3.new(1,1,1); rw.BackgroundTransparency = 0.85; rw.BorderSizePixel = 0; rw.ZIndex = 18; rw.LayoutOrder = po(pi); rw.ClipsDescendants = true
+    Instance.new("UICorner", rw).CornerRadius = UDim.new(0, 8)
+    local rwG = Instance.new("UIGradient", rw); rwG.Color = Visual.getAuroraSequence(os.clock())
+    local ll = Instance.new("TextLabel", rw); ll.Text = tx; ll.Size = UDim2.new(1, 0, 1, 0); ll.BackgroundTransparency = 1; ll.TextSize = 11; ll.Font = Enum.Font.GothamBold; ll.TextXAlignment = Enum.TextXAlignment.Center; ll.ZIndex = 20; ll.TextColor3 = Color3.new(1,1,1)
+    rw.MouseEnter:Connect(function() TS:Create(rw, TweenInfo.new(0.15), {BackgroundTransparency = 0.7}):Play() end)
+    rw.MouseLeave:Connect(function() TS:Create(rw, TweenInfo.new(0.15), {BackgroundTransparency = 0.85}):Play() end)
+    local bn = Instance.new("TextButton", rw); bn.Size = UDim2.new(1, 0, 1, 0); bn.BackgroundTransparency = 1; bn.Text = ""; bn.ZIndex = 22; bn.AutoButtonColor = false
+    bn.MouseButton1Click:Connect(function()
+        Visual.playSound(SoundIDs.ButtonClick, 0.25, 1.0)
+        local mx2 = UIS:GetMouseLocation(); Visual.Ripple(rw, mx2.X - rw.AbsolutePosition.X, mx2.Y - rw.AbsolutePosition.Y)
+        if cb then cb() end
+    end)
+    table.insert(Visual.themeCallbacks, function() pcall(function() rwG.Color = Visual.getAuroraSequence(os.clock()) end) end)
+end
+
+-- =============================================
+--          RAGE BUTTON — AURORA GRADIENT
+-- =============================================
+local rageBtn = Instance.new("TextButton", gui)
+rageBtn.Size = UDim2.new(0, 100, 0, 34)
+rageBtn.Position = UDim2.new(0, 20, 1, -54)
+rageBtn.BackgroundColor3 = Color3.new(1,1,1)
+rageBtn.BackgroundTransparency = 0.15
+rageBtn.Text = "RAGE"
+rageBtn.TextColor3 = Color3.new(1,1,1)
+rageBtn.TextSize = 12
+rageBtn.Font = Enum.Font.GothamBold
+rageBtn.BorderSizePixel = 0
+rageBtn.ZIndex = 50
+rageBtn.Visible = false
+rageBtn.AutoButtonColor = false
+rageBtn.ClipsDescendants = true
+Instance.new("UICorner", rageBtn).CornerRadius = UDim.new(0, 8)
+local rageBtnGrad = Instance.new("UIGradient", rageBtn)
+Visual._rageBtnGrad = rageBtnGrad
+local rageBtnStroke = Instance.new("UIStroke", rageBtn)
+rageBtnStroke.Thickness = 1.5
+rageBtnStroke.Transparency = 0.2
+local rageBtnStrokeGrad = Instance.new("UIGradient", rageBtnStroke)
+Visual._rageBtnStrokeGrad = rageBtnStrokeGrad
+
+Visual._onRageToggle = nil
+rageBtn.MouseButton1Click:Connect(function()
+    Visual.playSound(SoundIDs.ButtonClick, 0.25, 0.85)
+    Visual.Ripple(rageBtn, rageBtn.AbsoluteSize.X/2, rageBtn.AbsoluteSize.Y/2)
+    Visual._rageMode = not Visual._rageMode
+    if Visual._onRageToggle then Visual._onRageToggle(Visual._rageMode) end
+    if Visual._rageMode then
+        rebuildTabs(TN_RAGE)
+        Visual.Notify("Rage", "Rage mode activated — Target tab added", 3, Color3.fromRGB(255, 60, 60))
     else
-        return 6
+        rebuildTabs(TN_NORMAL)
+        Visual.Notify("Rage", "Rage mode deactivated", 2)
     end
-end
-
-local function refreshTabButtons()
-    for _, button in ipairs(tabButtons) do
-        if button then
-            button:Destroy()
-        end
-    end
-    table.clear(tabButtons)
-
-    currentTabs = isRageMode and Visual.RageTabs or Visual.NormalTabs
-    Visual.TabNames = currentTabs
-
-    local count = #currentTabs
-    local width = math.floor(windowW / count)
-
-    for i, name in ipairs(currentTabs) do
-        local button = Instance.new("TextButton")
-        button.Text = name
-        button.Size = UDim2.new(0, width, 1, 0)
-        button.Position = UDim2.new(0, (i - 1) * width, 0, 0)
-        button.BackgroundTransparency = 1
-        button.TextColor3 = Color3.new(1, 1, 1)
-        button.TextSize = 11
-        button.Font = Enum.Font.GothamBold
-        button.BorderSizePixel = 0
-        button.AutoButtonColor = false
-        button.ZIndex = 15
-        button.Parent = tabBar
-
-        local textGrad = Instance.new("UIGradient")
-        textGrad.Color = Visual.getAuroraSequence(os.clock() + i * 0.2)
-        textGrad.Parent = button
-
-        button.MouseEnter:Connect(function()
-            if activeTab ~= i then
-                TweenService:Create(button, TweenInfo.new(0.15), {
-                    TextTransparency = 0.1
-                }):Play()
-            end
-        end)
-
-        button.MouseLeave:Connect(function()
-            if activeTab ~= i then
-                TweenService:Create(button, TweenInfo.new(0.15), {
-                    TextTransparency = 0.35
-                }):Play()
-            end
-        end)
-
-        button.MouseButton1Click:Connect(function()
-            Visual.PlaySound("Tab", 0.22, 1.02)
-            activeTab = i
-
-            for pageIndex = 1, 6 do
-                tabPages[pageIndex].Visible = false
-            end
-
-            local mappedPage = Visual.getMappedPage(i, isRageMode)
-            tabPages[mappedPage].Visible = true
-
-            for bIndex, b in ipairs(tabButtons) do
-                TweenService:Create(b, TweenInfo.new(0.25, Enum.EasingStyle.Quint), {
-                    TextTransparency = (bIndex == i) and 0 or 0.35
-                }):Play()
-            end
-
-            TweenService:Create(tabIndicator, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {
-                Position = UDim2.new(0, (i - 1) * width + 8, 1, -2),
-                Size = UDim2.new(0, width - 16, 0, 2)
-            }):Play()
-        end)
-
-        button.TextTransparency = i == activeTab and 0 or 0.35
-        tabButtons[i] = button
-    end
-
-    for pageIndex = 1, 6 do
-        tabPages[pageIndex].Visible = false
-    end
-    local mappedPage = Visual.getMappedPage(activeTab, isRageMode)
-    tabPages[mappedPage].Visible = true
-
-    tabIndicator.Size = UDim2.new(0, width - 16, 0, 2)
-    tabIndicator.Position = UDim2.new(0, (activeTab - 1) * width + 8, 1, -2)
-end
-
-function Visual.setRageMode(state)
-    state = not not state
-    isRageMode = state
-    Visual.isRageMode = state
-
-    TweenService:Create(rageOverlay, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {
-        BackgroundTransparency = state and 0.88 or 1
-    }):Play()
-
-    TweenService:Create(fullAurora, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {
-        BackgroundTransparency = state and 0.18 or 0.32
-    }):Play()
-
-    rageButton.Text = state and "RAGE ON" or "RAGE"
-    moonButtonText.Text = state and "LUNA R" or "LUNA"
-
-    if activeTab > #(state and Visual.RageTabs or Visual.NormalTabs) then
-        activeTab = 1
-    end
-
-    refreshTabButtons()
-end
-
-Visual.tPs = tabPages
-Visual.tBs = tabButtons
-Visual.refreshTabs = refreshTabButtons
-refreshTabButtons()
-
-function Visual.makeSection(pageIndex, text, C)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, -4, 0, 24)
-    frame.BackgroundTransparency = 1
-    frame.LayoutOrder = nextOrder(pageIndex)
-    frame.ZIndex = 18
-    frame.Parent = tabPages[pageIndex]
-
-    local label = Instance.new("TextLabel")
-    label.Text = string.upper(text)
-    label.Size = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.TextSize = 10
-    label.Font = Enum.Font.GothamBold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.ZIndex = 20
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.Parent = frame
-
-    local labelGrad = Instance.new("UIGradient")
-    labelGrad.Color = Visual.getAuroraSequence(os.clock() + pageOrders[pageIndex] * 0.2)
-    labelGrad.Parent = label
-
-    local line = Instance.new("Frame")
-    line.Size = UDim2.new(1, 0, 0, 1)
-    line.Position = UDim2.new(0, 0, 1, -1)
-    line.BackgroundColor3 = Color3.new(1, 1, 1)
-    line.BackgroundTransparency = 0.4
-    line.BorderSizePixel = 0
-    line.ZIndex = 20
-    line.Parent = frame
-
-    local lineGrad = Instance.new("UIGradient")
-    lineGrad.Color = Visual.getAuroraSequence(os.clock())
-    lineGrad.Parent = line
-
-    table.insert(Visual.themeCallbacks, function()
-        labelGrad.Color = Visual.getAuroraSequence(os.clock() + pageOrders[pageIndex] * 0.2)
-        lineGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeToggle(pageIndex, text, key, CFG, C, callback)
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 34)
-    row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.12
-    row.BorderSizePixel = 0
-    row.ZIndex = 18
-    row.LayoutOrder = nextOrder(pageIndex)
-    row.ClipsDescendants = true
-    row.Parent = tabPages[pageIndex]
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-
-    local rowGrad = Instance.new("UIGradient")
-    rowGrad.Color = Visual.getAuroraSequence(os.clock())
-    rowGrad.Rotation = 16
-    rowGrad.Parent = row
-
-    local title = Instance.new("TextLabel")
-    title.Text = text
-    title.Size = UDim2.new(1, -56, 1, 0)
-    title.Position = UDim2.new(0, 12, 0, 0)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.new(1, 1, 1)
-    title.TextSize = 11
-    title.Font = Enum.Font.GothamSemibold
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 20
-    title.Parent = row
-    local titleGrad = Instance.new("UIGradient")
-    titleGrad.Color = Visual.getAuroraSequence(os.clock())
-    titleGrad.Parent = title
-
-    local pill = Instance.new("Frame")
-    pill.Size = UDim2.new(0, 38, 0, 18)
-    pill.Position = UDim2.new(1, -46, 0.5, -9)
-    pill.BackgroundColor3 = Color3.new(1, 1, 1)
-    pill.BackgroundTransparency = CFG[key] and 0.05 or 0.45
-    pill.BorderSizePixel = 0
-    pill.ZIndex = 20
-    pill.Parent = row
-    Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
-    local pillGrad = Instance.new("UIGradient")
-    pillGrad.Color = Visual.getAuroraSequence(os.clock())
-    pillGrad.Parent = pill
-
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 12, 0, 12)
-    knob.Position = CFG[key] and UDim2.new(1, -15, 0.5, -6) or UDim2.new(0, 3, 0.5, -6)
-    knob.BackgroundColor3 = Color3.new(1, 1, 1)
-    knob.BorderSizePixel = 0
-    knob.ZIndex = 21
-    knob.Parent = pill
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-
-    row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.04}):Play()
-    end)
-    row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.12}):Play()
-    end)
-
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.BackgroundTransparency = 1
-    button.Text = ""
-    button.ZIndex = 22
-    button.AutoButtonColor = false
-    button.Parent = row
-    bindClick(button, "Toggle")
-
-    button.MouseButton1Click:Connect(function()
-        CFG[key] = not CFG[key]
-        local state = CFG[key]
-        local mouse = UserInputService:GetMouseLocation()
-        Visual.Ripple(row, mouse.X - row.AbsolutePosition.X, mouse.Y - row.AbsolutePosition.Y)
-        TweenService:Create(pill, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-            BackgroundTransparency = state and 0.05 or 0.45
-        }):Play()
-        TweenService:Create(knob, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-            Position = state and UDim2.new(1, -15, 0.5, -6) or UDim2.new(0, 3, 0.5, -6)
-        }):Play()
-        if callback then
-            callback(state)
-        end
-    end)
-
-    table.insert(Visual.themeCallbacks, function()
-        rowGrad.Color = Visual.getAuroraSequence(os.clock())
-        pillGrad.Color = Visual.getAuroraSequence(os.clock())
-        titleGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeSlider(pageIndex, text, key, minVal, maxVal, step, CFG, C, allConnections)
-    allConnections = allConnections or {}
-
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 40)
-    row.BackgroundTransparency = 1
-    row.ZIndex = 18
-    row.LayoutOrder = nextOrder(pageIndex)
-    row.Parent = tabPages[pageIndex]
-
-    local title = Instance.new("TextLabel")
-    title.Text = text
-    title.Size = UDim2.new(0.55, 0, 0, 14)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.new(1, 1, 1)
-    title.TextSize = 10
-    title.Font = Enum.Font.Gotham
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    title.ZIndex = 20
-    title.Parent = row
-    local titleGrad = Instance.new("UIGradient")
-    titleGrad.Color = Visual.getAuroraSequence(os.clock())
-    titleGrad.Parent = title
-
-    local valueLabel = Instance.new("TextLabel")
-    valueLabel.Text = step < 1 and string.format("%.2f", CFG[key]) or tostring(math.floor(CFG[key]))
-    valueLabel.Size = UDim2.new(0.43, 0, 0, 14)
-    valueLabel.Position = UDim2.new(0.55, 0, 0, 0)
-    valueLabel.BackgroundTransparency = 1
-    valueLabel.TextColor3 = Color3.new(1, 1, 1)
-    valueLabel.TextSize = 11
-    valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    valueLabel.ZIndex = 20
-    valueLabel.Parent = row
-    local valueGrad = Instance.new("UIGradient")
-    valueGrad.Color = Visual.getAuroraSequence(os.clock())
-    valueGrad.Parent = valueLabel
-
-    local track = Instance.new("Frame")
-    track.Size = UDim2.new(1, 0, 0, 5)
-    track.Position = UDim2.new(0, 0, 0, 22)
-    track.BackgroundColor3 = Color3.new(1, 1, 1)
-    track.BackgroundTransparency = 0.55
-    track.BorderSizePixel = 0
-    track.ZIndex = 20
-    track.Parent = row
-    Instance.new("UICorner", track).CornerRadius = UDim.new(0, 3)
-    local trackGrad = Instance.new("UIGradient")
-    trackGrad.Color = Visual.getAuroraSequence(os.clock())
-    trackGrad.Parent = track
-
-    local percent = math.clamp((CFG[key] - minVal) / (maxVal - minVal), 0, 1)
-
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(percent, 0, 1, 0)
-    fill.BackgroundColor3 = Color3.new(1, 1, 1)
-    fill.BorderSizePixel = 0
-    fill.ZIndex = 21
-    fill.Parent = track
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(0, 3)
-    local fillGrad = Instance.new("UIGradient")
-    fillGrad.Color = Visual.getAuroraSequence(os.clock())
-    fillGrad.Parent = fill
-
-    local knob = Instance.new("TextButton")
-    knob.Size = UDim2.new(0, 14, 0, 14)
-    knob.AnchorPoint = Vector2.new(0.5, 0.5)
-    knob.Position = UDim2.new(percent, 0, 0.5, 0)
-    knob.BackgroundColor3 = Color3.new(1, 1, 1)
-    knob.Text = ""
-    knob.AutoButtonColor = false
-    knob.BorderSizePixel = 0
-    knob.ZIndex = 23
-    knob.Parent = track
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-    local knobGrad = Instance.new("UIGradient")
-    knobGrad.Color = Visual.getAuroraSequence(os.clock())
-    knobGrad.Parent = knob
-
-    local dragging = false
-
-    local function setValue(v)
-        if step > 0 then
-            v = math.floor(v / step + 0.5) * step
-        end
-        v = math.clamp(v, minVal, maxVal)
-        CFG[key] = v
-        local p = math.clamp((v - minVal) / (maxVal - minVal), 0, 1)
-        fill.Size = UDim2.new(p, 0, 1, 0)
-        knob.Position = UDim2.new(p, 0, 0.5, 0)
-        valueLabel.Text = step < 1 and string.format("%.2f", v) or tostring(math.floor(v))
-    end
-
-    knob.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            Visual.PlaySound("Click", 0.15, 1.05)
-        end
-    end)
-
-    table.insert(allConnections, UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end))
-
-    table.insert(allConnections, UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            local width = track.AbsoluteSize.X
-            if width > 0 then
-                setValue(minVal + math.clamp((input.Position.X - track.AbsolutePosition.X) / width, 0, 1) * (maxVal - minVal))
-            end
-        end
-    end))
-
-    track.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 then
-            local width = track.AbsoluteSize.X
-            if width > 0 then
-                setValue(minVal + math.clamp((input.Position.X - track.AbsolutePosition.X) / width, 0, 1) * (maxVal - minVal))
-                Visual.PlaySound("Click", 0.15, 1)
-            end
-        end
-    end))
-
-    table.insert(Visual.themeCallbacks, function()
-        titleGrad.Color = Visual.getAuroraSequence(os.clock())
-        valueGrad.Color = Visual.getAuroraSequence(os.clock())
-        trackGrad.Color = Visual.getAuroraSequence(os.clock())
-        fillGrad.Color = Visual.getAuroraSequence(os.clock())
-        knobGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeCycle(pageIndex, text, options, key, CFG, C, callback)
-    local index = CFG[key] or 1
-
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 34)
-    row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.12
-    row.BorderSizePixel = 0
-    row.ZIndex = 18
-    row.LayoutOrder = nextOrder(pageIndex)
-    row.ClipsDescendants = true
-    row.Parent = tabPages[pageIndex]
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-    local rowGrad = Instance.new("UIGradient")
-    rowGrad.Color = Visual.getAuroraSequence(os.clock())
-    rowGrad.Parent = row
-
-    local leftLabel = Instance.new("TextLabel")
-    leftLabel.Text = text
-    leftLabel.Size = UDim2.new(0.5, 0, 1, 0)
-    leftLabel.Position = UDim2.new(0, 12, 0, 0)
-    leftLabel.BackgroundTransparency = 1
-    leftLabel.TextColor3 = Color3.new(1, 1, 1)
-    leftLabel.TextSize = 11
-    leftLabel.Font = Enum.Font.GothamSemibold
-    leftLabel.TextXAlignment = Enum.TextXAlignment.Left
-    leftLabel.ZIndex = 20
-    leftLabel.Parent = row
-    local leftGrad = Instance.new("UIGradient")
-    leftGrad.Color = Visual.getAuroraSequence(os.clock())
-    leftGrad.Parent = leftLabel
-
-    local rightLabel = Instance.new("TextLabel")
-    rightLabel.Text = tostring(options[index])
-    rightLabel.Size = UDim2.new(0.42, 0, 1, 0)
-    rightLabel.Position = UDim2.new(0.5, 0, 0, 0)
-    rightLabel.BackgroundTransparency = 1
-    rightLabel.TextColor3 = Color3.new(1, 1, 1)
-    rightLabel.TextSize = 11
-    rightLabel.Font = Enum.Font.GothamBold
-    rightLabel.TextXAlignment = Enum.TextXAlignment.Right
-    rightLabel.ZIndex = 20
-    rightLabel.Parent = row
-    local rightGrad = Instance.new("UIGradient")
-    rightGrad.Color = Visual.getAuroraSequence(os.clock())
-    rightGrad.Parent = rightLabel
-
-    row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.04}):Play()
-    end)
-    row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.12}):Play()
-    end)
-
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.BackgroundTransparency = 1
-    button.Text = ""
-    button.ZIndex = 22
-    button.AutoButtonColor = false
-    button.Parent = row
-    bindClick(button, "Click")
-
-    button.MouseButton1Click:Connect(function()
-        local mouse = UserInputService:GetMouseLocation()
-        Visual.Ripple(row, mouse.X - row.AbsolutePosition.X, mouse.Y - row.AbsolutePosition.Y)
-        index = index % #options + 1
-        CFG[key] = index
-        rightLabel.Text = tostring(options[index])
-        if callback then
-            callback(index)
-        end
-    end)
-
-    table.insert(Visual.themeCallbacks, function()
-        rowGrad.Color = Visual.getAuroraSequence(os.clock())
-        leftGrad.Color = Visual.getAuroraSequence(os.clock())
-        rightGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeRebind(pageIndex, labelText, cfgKey, CFG, C, allConnections)
-    allConnections = allConnections or {}
-
-    local row = Instance.new("Frame")
-    row.Size = UDim2.new(1, -4, 0, 34)
-    row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.12
-    row.BorderSizePixel = 0
-    row.ZIndex = 18
-    row.LayoutOrder = nextOrder(pageIndex)
-    row.ClipsDescendants = true
-    row.Parent = tabPages[pageIndex]
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
-    local rowGrad = Instance.new("UIGradient")
-    rowGrad.Color = Visual.getAuroraSequence(os.clock())
-    rowGrad.Parent = row
-
-    local leftLabel = Instance.new("TextLabel")
-    leftLabel.Text = labelText
-    leftLabel.Size = UDim2.new(0.5, 0, 1, 0)
-    leftLabel.Position = UDim2.new(0, 12, 0, 0)
-    leftLabel.BackgroundTransparency = 1
-    leftLabel.TextColor3 = Color3.new(1, 1, 1)
-    leftLabel.TextSize = 11
-    leftLabel.Font = Enum.Font.GothamSemibold
-    leftLabel.TextXAlignment = Enum.TextXAlignment.Left
-    leftLabel.ZIndex = 20
-    leftLabel.Parent = row
-    local leftGrad = Instance.new("UIGradient")
-    leftGrad.Color = Visual.getAuroraSequence(os.clock())
-    leftGrad.Parent = leftLabel
-
-    local valueLabel = Instance.new("TextLabel")
-    valueLabel.Text = "[ " .. tostring(CFG[cfgKey]) .. " ]"
-    valueLabel.Size = UDim2.new(0.44, 0, 1, 0)
-    valueLabel.Position = UDim2.new(0.5, 0, 0, 0)
-    valueLabel.BackgroundTransparency = 1
-    valueLabel.TextColor3 = Color3.new(1, 1, 1)
-    valueLabel.TextSize = 12
-    valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    valueLabel.ZIndex = 20
-    valueLabel.Parent = row
-    local valueGrad = Instance.new("UIGradient")
-    valueGrad.Color = Visual.getAuroraSequence(os.clock())
-    valueGrad.Parent = valueLabel
-
-    row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.04}):Play()
-    end)
-    row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.12}):Play()
-    end)
-
-    local button = Instance.new("TextButton")
-    button.Size = UDim2.new(1, 0, 1, 0)
-    button.BackgroundTransparency = 1
-    button.Text = ""
-    button.ZIndex = 22
-    button.AutoButtonColor = false
-    button.Parent = row
-    bindClick(button, "Click")
-
-    button.MouseButton1Click:Connect(function()
-        Visual.Ripple(row, row.AbsoluteSize.X / 2, row.AbsoluteSize.Y / 2)
-        valueLabel.Text = "..."
-        local rebinding = true
-
-        local connection
-        connection = UserInputService.InputBegan:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                local name = input.KeyCode.Name
-                if name ~= "Unknown" then
-                    CFG[cfgKey] = name
-                    valueLabel.Text = "[ " .. name .. " ]"
-                    rebinding = false
-                    if connection then
-                        connection:Disconnect()
-                    end
-                end
-            end
-        end)
-
-        task.delay(5, function()
-            if rebinding then
-                rebinding = false
-                valueLabel.Text = "[ " .. tostring(CFG[cfgKey]) .. " ]"
-                if connection then
-                    connection:Disconnect()
-                end
-            end
-        end)
-    end)
-
-    table.insert(Visual.themeCallbacks, function()
-        rowGrad.Color = Visual.getAuroraSequence(os.clock())
-        leftGrad.Color = Visual.getAuroraSequence(os.clock())
-        valueGrad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeInfo(pageIndex, text, C)
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, -4, 0, 14)
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.TextSize = 9
-    label.Font = Enum.Font.Code
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.ZIndex = 20
-    label.LayoutOrder = nextOrder(pageIndex)
-    label.Parent = tabPages[pageIndex]
-    local grad = Instance.new("UIGradient")
-    grad.Color = Visual.getAuroraSequence(os.clock())
-    grad.Parent = label
-    table.insert(Visual.themeCallbacks, function()
-        grad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-end
-
-function Visual.makeLabel(pageIndex, C)
-    local label = Instance.new("TextLabel")
-    label.Text = ""
-    label.Size = UDim2.new(1, -8, 0, 16)
-    label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.new(1, 1, 1)
-    label.TextSize = 12
-    label.Font = Enum.Font.GothamBold
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.ZIndex = 20
-    label.LayoutOrder = nextOrder(pageIndex)
-    label.Parent = tabPages[pageIndex]
-    local grad = Instance.new("UIGradient")
-    grad.Color = Visual.getAuroraSequence(os.clock())
-    grad.Parent = label
-    table.insert(Visual.themeCallbacks, function()
-        grad.Color = Visual.getAuroraSequence(os.clock())
-    end)
-    return label
-end
-
-local menuOpen = false
+    Visual.switchTab(1)
+end)
+Visual.rageBtn = rageBtn
+
+-- =============================================
+--          OPEN / CLOSE
+-- =============================================
+local isOpen = false
 Visual.isOpen = false
-Visual.isRageMode = false
-local savedMouseBehavior = nil
-local savedMouseIconEnabled = nil
+local savedMB, savedMI = nil, nil
 
 function Visual.openMenu(CFG)
-    menuOpen = true
-    Visual.isOpen = true
-
-    mainWindow.Visible = true
-    dimOverlay.Visible = true
-    fullAurora.Visible = true
-    moonCanvas.Visible = true
-    rageButton.Visible = true
-
-    windowW, windowH = Visual.getWS(CFG)
-
+    isOpen = true; Visual.isOpen = true
+    Visual.playSound(SoundIDs.MenuOpen, 0.3, 1.0)
+    W.Visible = true; dimOverlay.Visible = true; rageBtn.Visible = true; moonSvgFrame.Visible = true
+    fullscreenOverlay.Visible = true
+    fullscreenOverlay.BackgroundTransparency = 1
+    TS:Create(fullscreenOverlay, TweenInfo.new(0.4), {BackgroundTransparency = 0.08}):Play()
+    wW, wH = Visual.getWS(CFG)
     dimOverlay.BackgroundTransparency = 1
-    fullAurora.BackgroundTransparency = 1
-
-    TweenService:Create(dimOverlay, TweenInfo.new(0.3), {
-        BackgroundTransparency = 0.75
+    TS:Create(dimOverlay, TweenInfo.new(0.3), {BackgroundTransparency = 0.45}):Play()
+    W.Size = UDim2.new(0, wW*0.88, 0, wH*0.88)
+    W.Position = UDim2.new(0.5, -wW*0.44, 0.5, -wH*0.44)
+    W.BackgroundTransparency = 0.5
+    TS:Create(W, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, wW, 0, wH), Position = UDim2.new(0.5, -wW/2, 0.5, -wH/2), BackgroundTransparency = 0.02
     }):Play()
-    TweenService:Create(fullAurora, TweenInfo.new(0.35), {
-        BackgroundTransparency = 0.32
-    }):Play()
-
-    mainWindow.Size = UDim2.new(0, windowW * 0.88, 0, windowH * 0.88)
-    mainWindow.Position = UDim2.new(0.5, -windowW * 0.44, 0.5, -windowH * 0.44)
-    mainWindow.BackgroundTransparency = 0.5
-
-    TweenService:Create(mainWindow, TweenInfo.new(0.35, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, windowW, 0, windowH),
-        Position = UDim2.new(0.5, -windowW / 2, 0.5, -windowH / 2),
-        BackgroundTransparency = 0.06
-    }):Play()
-
-    TweenService:Create(blurMain, TweenInfo.new(0.3), {Size = 24}):Play()
-    Visual.PlaySound("Open", 0.28, 1)
-
-    pcall(function()
-        savedMouseBehavior = UserInputService.MouseBehavior
-        savedMouseIconEnabled = UserInputService.MouseIconEnabled
-        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
-        UserInputService.MouseIconEnabled = true
-    end)
+    TS:Create(blurMain, TweenInfo.new(0.3), {Size = 18}):Play()
+    pcall(function() savedMB = UIS.MouseBehavior; savedMI = UIS.MouseIconEnabled; UIS.MouseBehavior = Enum.MouseBehavior.Default; UIS.MouseIconEnabled = true end)
 end
 
 function Visual.closeMenu(CFG)
-    menuOpen = false
-    Visual.isOpen = false
-
-    TweenService:Create(dimOverlay, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
-    TweenService:Create(fullAurora, TweenInfo.new(0.25), {BackgroundTransparency = 1}):Play()
-    TweenService:Create(mainWindow, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-        Size = UDim2.new(0, windowW * 0.88, 0, windowH * 0.88),
-        BackgroundTransparency = 1
-    }):Play()
-    TweenService:Create(blurMain, TweenInfo.new(0.2), {Size = 0}):Play()
-    Visual.PlaySound("Close", 0.22, 1)
-
-    task.delay(0.3, function()
-        if not menuOpen then
-            mainWindow.Visible = false
-            dimOverlay.Visible = false
-            fullAurora.Visible = false
-            moonCanvas.Visible = false
-        end
-    end)
-
-    pcall(function()
-        if savedMouseBehavior then
-            UserInputService.MouseBehavior = savedMouseBehavior
-        end
-        if savedMouseIconEnabled ~= nil then
-            UserInputService.MouseIconEnabled = savedMouseIconEnabled
-        end
-    end)
+    isOpen = false; Visual.isOpen = false
+    Visual.playSound(SoundIDs.MenuClose, 0.25, 1.0)
+    rageBtn.Visible = false; moonSvgFrame.Visible = false
+    TS:Create(fullscreenOverlay, TweenInfo.new(0.25), {BackgroundTransparency = 1}):Play()
+    task.delay(0.3, function() pcall(function() fullscreenOverlay.Visible = false end) end)
+    TS:Create(dimOverlay, TweenInfo.new(0.2), {BackgroundTransparency = 1}):Play()
+    TS:Create(W, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {Size = UDim2.new(0, wW*0.88, 0, wH*0.88), BackgroundTransparency = 1}):Play()
+    TS:Create(blurMain, TweenInfo.new(0.2), {Size = 0}):Play()
+    task.delay(0.3, function() pcall(function() if not isOpen then W.Visible = false; dimOverlay.Visible = false end end) end)
+    pcall(function() if savedMB then UIS.MouseBehavior = savedMB end; if savedMI ~= nil then UIS.MouseIconEnabled = savedMI end end)
 end
 
+-- =============================================
+--          ANIMATION UPDATE
+-- =============================================
 local themeTimer = 0
 function Visual.updateAnimations(dt, globalT)
-    local sequence = Visual.getAuroraSequence(globalT)
+    local aSeq = Visual.getAuroraSequence(globalT)
+    pcall(function() Visual._wmBgGrad.Color = aSeq end)
+    pcall(function() Visual._wmStGrad.Color = aSeq end)
+    pcall(function() Visual._wmTxtGrad.Color = aSeq end)
+    pcall(function() Visual._wmTimeGrad.Color = aSeq end)
+    pcall(function() Visual.wmTime.Text = os.date("%H:%M") end)
+    pcall(function() Visual._bfBgGrad.Color = aSeq end)
+    pcall(function() Visual._bfStGrad.Color = aSeq end)
+    pcall(function() Visual._bfTitleGrad.Color = aSeq end)
+    pcall(function() Visual._rageBtnGrad.Color = aSeq end)
+    pcall(function() Visual._rageBtnStrokeGrad.Color = aSeq end)
+    pcall(function() Visual._guiStatusGrad.Color = aSeq end)
+    pcall(function() Visual._guiFPSGrad.Color = aSeq end)
+    pcall(function() Visual._guiKillsGrad.Color = aSeq end)
 
-    watermarkGrad.Color = sequence
-    watermarkStrokeGrad.Color = sequence
-    watermarkTitleGrad.Color = sequence
-    watermarkTimeGrad.Color = sequence
-    watermarkTime.Text = os.date("%H:%M")
+    if isOpen then
+        pcall(function() Visual._fullscreenGrad.Color = aSeq end)
+        pcall(function() Visual._auroraBgGrad.Color = aSeq end)
+        pcall(function() Visual._gStGrad.Color = aSeq end)
+        pcall(function() Visual._tBGrad.Color = aSeq end)
+        pcall(function() Visual._tLGrad.Color = aSeq end)
+        pcall(function() Visual._tabIndGrad.Color = aSeq end)
+        pcall(function() Visual._hudStGrad.Color = aSeq end)
+        pcall(function() Visual._moonBtnGrad.Color = aSeq end)
+        pcall(function() if Visual._closeBtnG then Visual._closeBtnG.Color = aSeq end end)
+        pcall(function() if Visual._minBtnG then Visual._minBtnG.Color = aSeq end end)
+        pcall(function() Visual._moonOuterGrad.Color = aSeq end)
+        pcall(function() Visual._moonOuterStrokeGrad.Color = aSeq end)
+        pcall(function() Visual._moonGlowGrad.Color = aSeq end)
+        pcall(function() Visual._moonLabelGrad.Color = aSeq end)
 
-    bindsGrad.Color = sequence
-    bindsStrokeGrad.Color = sequence
-    bindsTitleGrad.Color = sequence
-
-    hudGrad.Color = sequence
-    hudStrokeGrad.Color = sequence
-
-    titleBarGrad.Color = sequence
-    titleLineGrad.Color = sequence
-    tabBarGrad.Color = sequence
-    tabIndicatorGrad.Color = sequence
-    moonButtonGrad.Color = sequence
-    moonButtonTextGrad.Color = sequence
-    statusGrad.Color = sequence
-    fpsGrad.Color = sequence
-    killsGrad.Color = sequence
-    mainGrad.Color = sequence
-    mainStrokeGrad.Color = sequence
-    fullAuroraGrad.Color = sequence
-    moonOuterGrad.Color = sequence
-
-    if closeButtonGrad then closeButtonGrad.Color = sequence end
-    if minimizeButtonGrad then minimizeButtonGrad.Color = sequence end
-
-    if not menuOpen then
-        return
+        pcall(function()
+            local pulse = 0.7 + math.sin(globalT * 2) * 0.15
+            moonGlow.BackgroundTransparency = pulse
+        end)
     end
 
     themeTimer = themeTimer + dt
-    if themeTimer > 0.5 then
+    if themeTimer > 0.45 then
         themeTimer = 0
-        for _, callback in ipairs(Visual.themeCallbacks) do
-            pcall(callback)
-        end
+        for _, fn in ipairs(Visual.themeCallbacks) do pcall(fn) end
     end
 
-    for index, star in ipairs(stars) do
-        local pulse = 0.5 + math.sin(globalT * (1 + index * 0.2)) * 0.3
-        star.BackgroundTransparency = pulse
-        star.BackgroundColor3 = Visual.isRageMode
-            and Visual.getAuroraColor(globalT, index * 0.2):Lerp(Color3.fromRGB(255, 60, 90), 0.35)
-            or Visual.getAuroraColor(globalT, index * 0.3)
+    for idx, star in ipairs(guiStars) do
+        pcall(function()
+            star.BackgroundTransparency = 0.5 + math.sin(globalT * (1 + idx * 0.2)) * 0.3
+            star.BackgroundColor3 = Visual.getAuroraColor(globalT, idx * 0.3)
+        end)
     end
-
-    moonCanvas.Rotation = math.sin(globalT * 0.6) * 6
-    moonCanvas.Position = UDim2.new(1, -148 + math.floor(math.sin(globalT * 1.2) * 3), 0, 90 + math.floor(math.cos(globalT) * 2))
 end
 
 function Visual.handleDrag(inputPos)
     if Visual._dragState.drag and Visual._dragState.start and Visual._dragState.pos then
-        local delta = inputPos - Visual._dragState.start
-        mainWindow.Position = UDim2.new(
-            Visual._dragState.pos.X.Scale, Visual._dragState.pos.X.Offset + delta.X,
-            Visual._dragState.pos.Y.Scale, Visual._dragState.pos.Y.Offset + delta.Y
-        )
+        local d = inputPos - Visual._dragState.start
+        W.Position = UDim2.new(Visual._dragState.pos.X.Scale, Visual._dragState.pos.X.Offset + d.X, Visual._dragState.pos.Y.Scale, Visual._dragState.pos.Y.Offset + d.Y)
     end
-
     if Visual._bfDrag.drag and Visual._bfDrag.start and Visual._bfDrag.pos then
-        local delta = inputPos - Visual._bfDrag.start
-        bindsFrame.Position = UDim2.new(
-            Visual._bfDrag.pos.X.Scale, Visual._bfDrag.pos.X.Offset + delta.X,
-            Visual._bfDrag.pos.Y.Scale, Visual._bfDrag.pos.Y.Offset + delta.Y
-        )
+        local d = inputPos - Visual._bfDrag.start
+        bindsFrame.Position = UDim2.new(Visual._bfDrag.pos.X.Scale, Visual._bfDrag.pos.X.Offset + d.X, Visual._bfDrag.pos.Y.Scale, Visual._bfDrag.pos.Y.Offset + d.Y)
     end
 end
 
 function Visual.destroy()
-    pcall(function()
-        blurMain:Destroy()
-    end)
-    pcall(function()
-        gui:Destroy()
-    end)
-    pcall(function()
-        screenGui:Destroy()
-    end)
+    Visual.removeAllChams()
+    pcall(function() blurMain:Destroy() end)
+    pcall(function() gui:Destroy() end)
+    pcall(function() screenGui:Destroy() end)
+    for _, s in pairs(soundCache) do pcall(function() s:Destroy() end) end
+    soundCache = {}
 end
 
 return Visual
