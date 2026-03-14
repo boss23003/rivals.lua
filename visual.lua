@@ -543,7 +543,7 @@ dimOverlay.Visible = false
 Visual.dimOverlay = dimOverlay
 
 -- =============================================
---      BINDS DISPLAY — COMPACT, DRAGGABLE
+--      BINDS DISPLAY
 -- =============================================
 local bindsFrame = Instance.new("Frame", screenGui)
 bindsFrame.Size = UDim2.new(0, 148, 0, 24)
@@ -1055,20 +1055,16 @@ local function switchTab(idx)
             TextColor3 = (i == idx) and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(100, 90, 130)
         }):Play()
     end
-
     if tPs[oldTab] then
         local oldPage = tPs[oldTab]
-        TS:Create(oldPage, TweenInfo.new(0.15, Enum.EasingStyle.Quint), {}):Play()
         task.delay(0, function()
             oldPage.Visible = false
         end)
     end
-
     if tPs[idx] then
         tPs[idx].Visible = true
         tPs[idx].CanvasPosition = Vector2.new(0, 0)
     end
-
     TS:Create(tabInd, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {
         Position = UDim2.new(0, (idx - 1) * tbw + 8, 1, -2),
         Size = UDim2.new(0, tbw - 16, 0, 2)
@@ -1221,8 +1217,8 @@ function Visual.makeToggle(pi, tx, k, CFG, C, cb)
         CFG[k] = not CFG[k]
         local on = CFG[k]
         Visual.playSound(on and SoundIDs.ToggleOn or SoundIDs.ToggleOff, 0.25, on and 1.1 or 0.9)
-        local mx = UIS:GetMouseLocation()
-        Visual.Ripple(rw, mx.X - rw.AbsolutePosition.X, mx.Y - rw.AbsolutePosition.Y)
+        local mxPos = UIS:GetMouseLocation()
+        Visual.Ripple(rw, mxPos.X - rw.AbsolutePosition.X, mxPos.Y - rw.AbsolutePosition.Y)
         TS:Create(pl, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
             BackgroundTransparency = on and 0.12 or 0.82
         }):Play()
@@ -1405,8 +1401,8 @@ function Visual.makeCycle(pi, tx, opts, k, CFG, C, cb)
     bn.AutoButtonColor = false
     bn.MouseButton1Click:Connect(function()
         Visual.playSound(SoundIDs.ButtonClick, 0.2, 1.0)
-        local mx2 = UIS:GetMouseLocation()
-        Visual.Ripple(rw, mx2.X - rw.AbsolutePosition.X, mx2.Y - rw.AbsolutePosition.Y)
+        local mxPos2 = UIS:GetMouseLocation()
+        Visual.Ripple(rw, mxPos2.X - rw.AbsolutePosition.X, mxPos2.Y - rw.AbsolutePosition.Y)
         idx = idx % #opts + 1
         CFG[k] = idx
         rl.Text = tostring(opts[idx])
@@ -1560,8 +1556,8 @@ function Visual.makeButton(pi, tx, C, cb)
     bn.AutoButtonColor = false
     bn.MouseButton1Click:Connect(function()
         Visual.playSound(SoundIDs.ButtonClick, 0.25, 1.0)
-        local mx2 = UIS:GetMouseLocation()
-        Visual.Ripple(rw, mx2.X - rw.AbsolutePosition.X, mx2.Y - rw.AbsolutePosition.Y)
+        local mxPos2 = UIS:GetMouseLocation()
+        Visual.Ripple(rw, mxPos2.X - rw.AbsolutePosition.X, mxPos2.Y - rw.AbsolutePosition.Y)
         if cb then cb() end
     end)
 
