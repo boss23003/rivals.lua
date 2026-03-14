@@ -533,8 +533,8 @@ function Visual.showLoadingScreen()
         {92, "loading"}, {100, "ready"}
     }
 
-    task.spawn(function()
-        task.wait(0.6)
+    coroutine.wrap(function()
+        wait(0.6)
         for _, stage in ipairs(stages) do
             barFillGrad.Color = Visual.getAuroraSequence(os.clock())
             cardStrokeGrad.Color = Visual.getAuroraSequence(os.clock())
@@ -543,11 +543,11 @@ function Visual.showLoadingScreen()
             }):Play()
             sub.Text = stage[2]
             percent.Text = stage[1] .. "%"
-            task.wait(math.random(8, 18) * 0.01)
+            wait(math.random(8, 18) * 0.01)
         end
         sub.Text = "complete"
         percent.Text = "100%"
-        task.wait(0.4)
+        wait(0.4)
         TweenService:Create(card, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
         TweenService:Create(cardStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
         TweenService:Create(title, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
@@ -557,10 +557,10 @@ function Visual.showLoadingScreen()
         TweenService:Create(barBg, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
         TweenService:Create(dim, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
         TweenService:Create(blur, TweenInfo.new(0.3), {Size = 0}):Play()
-        task.wait(0.4)
+        wait(0.4)
         pcall(function() blur:Destroy() end)
         pcall(function() loadGui:Destroy() end)
-    end)
+    end)()
 end
 
 -- =============================================
@@ -658,15 +658,15 @@ Visual.gui = gui
 
 local guiScale = Instance.new("UIScale")
 guiScale.Parent = gui
-task.spawn(function()
+coroutine.wrap(function()
     while gui and gui.Parent do
         guiScale.Scale = math.clamp(
             math.min(Visual.getVP().X / BASE_W, Visual.getVP().Y / BASE_H),
             0.5, 3
         )
-        task.wait(0.6)
+        wait(0.6)
     end
-end)
+end)()
 
 -- Full aurora background overlay
 local fullAurora = Instance.new("Frame")
@@ -853,7 +853,8 @@ function Visual.pushBindEvent(text)
     }):Play()
     TweenService:Create(label, TweenInfo.new(0.24), {TextTransparency = 0}):Play()
 
-    task.delay(2.1, function()
+    coroutine.wrap(function()
+        wait(2.1)
         TweenService:Create(label, TweenInfo.new(0.2), {TextTransparency = 1}):Play()
         local outTween = TweenService:Create(row, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
             Size = UDim2.new(1, 0, 0, 0),
@@ -863,7 +864,7 @@ function Visual.pushBindEvent(text)
         outTween.Completed:Connect(function()
             pcall(function() row:Destroy() end)
         end)
-    end)
+    end)()
 end
 
 function Visual.updateActiveBinds(CFG, C, aimActive, targetActive, spinActive, rageMode)
