@@ -20,12 +20,12 @@ local BASE_H = 1080
 --          AURORA COLOR SYSTEM
 -- =============================================
 local auroraColors = {
-    Color3.fromRGB(120, 40, 220),
-    Color3.fromRGB(60, 120, 255),
-    Color3.fromRGB(40, 200, 200),
-    Color3.fromRGB(100, 60, 255),
-    Color3.fromRGB(180, 60, 220),
-    Color3.fromRGB(60, 180, 255)
+    Color3.fromRGB(80, 40, 180),
+    Color3.fromRGB(50, 90, 210),
+    Color3.fromRGB(40, 150, 150),
+    Color3.fromRGB(80, 60, 210),
+    Color3.fromRGB(130, 50, 180),
+    Color3.fromRGB(50, 130, 210)
 }
 local auroraCount = #auroraColors
 
@@ -1051,7 +1051,7 @@ mainWindow.Name = "W"
 mainWindow.Size = UDim2.new(0, windowW, 0, windowH)
 mainWindow.Position = UDim2.new(0.5, -windowW / 2, 0.5, -windowH / 2)
 mainWindow.BackgroundColor3 = Color3.new(1, 1, 1)
-mainWindow.BackgroundTransparency = 0.08
+mainWindow.BackgroundTransparency = 0.01
 mainWindow.BorderSizePixel = 0
 mainWindow.Visible = false
 mainWindow.ZIndex = 10
@@ -1063,8 +1063,8 @@ local mainGrad = Instance.new("UIGradient")
 mainGrad.Color = Visual.getAuroraSequence(os.clock())
 mainGrad.Rotation = 20
 mainGrad.Transparency = NumberSequence.new({
-    NumberSequenceKeypoint.new(0, 0.3),
-    NumberSequenceKeypoint.new(1, 0.1)
+    NumberSequenceKeypoint.new(0, 0.1),
+    NumberSequenceKeypoint.new(1, 0.0)
 })
 mainGrad.Parent = mainWindow
 Visual._mainGrad = mainGrad
@@ -1646,7 +1646,7 @@ function Visual.makeToggle(pi, text, key, CFG, callback)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -4, 0, 36)
     row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.18
+    row.BackgroundTransparency = 0.5
     row.BorderSizePixel = 0
     row.ZIndex = 18
     row.LayoutOrder = nextOrder(pi)
@@ -1658,8 +1658,8 @@ function Visual.makeToggle(pi, text, key, CFG, callback)
     rowGrad.Color = Visual.getAuroraSequence(os.clock())
     rowGrad.Rotation = 20
     rowGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.35),
-        NumberSequenceKeypoint.new(1, 0.18)
+        NumberSequenceKeypoint.new(0, 0.65),
+        NumberSequenceKeypoint.new(1, 0.45)
     })
     rowGrad.Parent = row
 
@@ -1674,6 +1674,9 @@ function Visual.makeToggle(pi, text, key, CFG, callback)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 20
     label.Parent = row
+    local stroke = Instance.new("UIStroke")
+    stroke.Transparency = 0.4
+    stroke.Parent = label
     local labelGrad = Instance.new("UIGradient")
     labelGrad.Color = Visual.getAuroraSequence(os.clock())
     labelGrad.Transparency = NumberSequence.new({
@@ -1719,10 +1722,10 @@ function Visual.makeToggle(pi, text, key, CFG, callback)
     Instance.new("UICorner", glow).CornerRadius = UDim.new(1, 0)
 
     row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.08}):Play()
+        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.3}):Play()
     end)
     row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.18}):Play()
+        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
     end)
 
     local btn = Instance.new("TextButton")
@@ -1752,6 +1755,7 @@ function Visual.makeToggle(pi, text, key, CFG, callback)
 
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
+            if labelGrad then labelGrad.Color = Visual.getAuroraSequence(os.clock()) end
             pillGrad.Color = Visual.getAuroraSequence(os.clock())
             glow.BackgroundColor3 = Visual.getAuroraColor(os.clock(), 0)
             rowGrad.Color = Visual.getAuroraSequence(os.clock())
@@ -1778,6 +1782,9 @@ function Visual.makeSlider(pi, text, key, mn, mx, step, CFG, allConnections)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 20
     label.Parent = row
+    local stroke = Instance.new("UIStroke")
+    stroke.Transparency = 0.4
+    stroke.Parent = label
     local labelGrad = Instance.new("UIGradient")
     labelGrad.Color = Visual.getAuroraSequence(os.clock())
     labelGrad.Transparency = NumberSequence.new({
@@ -1797,6 +1804,9 @@ function Visual.makeSlider(pi, text, key, mn, mx, step, CFG, allConnections)
     valLabel.TextXAlignment = Enum.TextXAlignment.Right
     valLabel.ZIndex = 20
     valLabel.Parent = row
+    local stroke2 = Instance.new("UIStroke")
+    stroke2.Transparency = 0.4
+    stroke2.Parent = valLabel
     local valGrad = Instance.new("UIGradient")
     valGrad.Color = Visual.getAuroraSequence(os.clock())
     valGrad.Parent = valLabel
@@ -1858,6 +1868,8 @@ function Visual.makeSlider(pi, text, key, mn, mx, step, CFG, allConnections)
 
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
+            if labelGrad then labelGrad.Color = Visual.getAuroraSequence(os.clock()) end
+            if valGrad then valGrad.Color = Visual.getAuroraSequence(os.clock() + 0.5) end
             fillGrad.Color = Visual.getAuroraSequence(os.clock())
             knobGrad.Color = Visual.getAuroraSequence(os.clock())
         end)
@@ -1902,7 +1914,7 @@ function Visual.makeCycle(pi, text, opts, key, CFG, callback)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -4, 0, 36)
     row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.18
+    row.BackgroundTransparency = 0.5
     row.BorderSizePixel = 0
     row.ZIndex = 18
     row.LayoutOrder = nextOrder(pi)
@@ -1914,8 +1926,8 @@ function Visual.makeCycle(pi, text, opts, key, CFG, callback)
     rowGrad.Color = Visual.getAuroraSequence(os.clock())
     rowGrad.Rotation = 20
     rowGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.35),
-        NumberSequenceKeypoint.new(1, 0.18)
+        NumberSequenceKeypoint.new(0, 0.65),
+        NumberSequenceKeypoint.new(1, 0.45)
     })
     rowGrad.Parent = row
 
@@ -1943,15 +1955,18 @@ function Visual.makeCycle(pi, text, opts, key, CFG, callback)
     valLabel.TextXAlignment = Enum.TextXAlignment.Right
     valLabel.ZIndex = 20
     valLabel.Parent = row
+    local stroke2 = Instance.new("UIStroke")
+    stroke2.Transparency = 0.4
+    stroke2.Parent = valLabel
     local valGrad = Instance.new("UIGradient")
     valGrad.Color = Visual.getAuroraSequence(os.clock())
     valGrad.Parent = valLabel
 
     row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.08}):Play()
+        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.3}):Play()
     end)
     row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.18}):Play()
+        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
     end)
 
     local btn = Instance.new("TextButton")
@@ -1970,6 +1985,12 @@ function Visual.makeCycle(pi, text, opts, key, CFG, callback)
         valLabel.Text = tostring(opts[idx])
         if callback then callback(idx) end
     end)
+    table.insert(Visual.themeCallbacks, function()
+        pcall(function()
+            if valGrad then valGrad.Color = Visual.getAuroraSequence(os.clock() + 0.5) end
+            if rowGrad then rowGrad.Color = Visual.getAuroraSequence(os.clock()) end
+        end)
+    end)
 end
 
 function Visual.makeRebind(pi, text, cfgKey, CFG, allConnections)
@@ -1977,7 +1998,7 @@ function Visual.makeRebind(pi, text, cfgKey, CFG, allConnections)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -4, 0, 36)
     row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.18
+    row.BackgroundTransparency = 0.5
     row.BorderSizePixel = 0
     row.ZIndex = 18
     row.LayoutOrder = nextOrder(pi)
@@ -1989,8 +2010,8 @@ function Visual.makeRebind(pi, text, cfgKey, CFG, allConnections)
     rowGrad.Color = Visual.getAuroraSequence(os.clock())
     rowGrad.Rotation = 20
     rowGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.35),
-        NumberSequenceKeypoint.new(1, 0.18)
+        NumberSequenceKeypoint.new(0, 0.65),
+        NumberSequenceKeypoint.new(1, 0.45)
     })
     rowGrad.Parent = row
 
@@ -2017,15 +2038,18 @@ function Visual.makeRebind(pi, text, cfgKey, CFG, allConnections)
     valLabel.TextXAlignment = Enum.TextXAlignment.Right
     valLabel.ZIndex = 20
     valLabel.Parent = row
+    local stroke2 = Instance.new("UIStroke")
+    stroke2.Transparency = 0.4
+    stroke2.Parent = valLabel
     local valGrad = Instance.new("UIGradient")
     valGrad.Color = Visual.getAuroraSequence(os.clock())
     valGrad.Parent = valLabel
 
     row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.08}):Play()
+        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.3}):Play()
     end)
     row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.18}):Play()
+        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.5}):Play()
     end)
 
     local rebinding = false
@@ -2062,6 +2086,12 @@ function Visual.makeRebind(pi, text, cfgKey, CFG, allConnections)
             end
         end)
     end)
+    table.insert(Visual.themeCallbacks, function()
+        pcall(function()
+            if valGrad then valGrad.Color = Visual.getAuroraSequence(os.clock() + 0.5) end
+            if rowGrad then rowGrad.Color = Visual.getAuroraSequence(os.clock()) end
+        end)
+    end)
 end
 
 function Visual.makeInfo(pi, text)
@@ -2076,6 +2106,9 @@ function Visual.makeInfo(pi, text)
     label.ZIndex = 20
     label.LayoutOrder = nextOrder(pi)
     label.Parent = tabPages[pi]
+    local stroke = Instance.new("UIStroke")
+    stroke.Transparency = 0.4
+    stroke.Parent = label
     local labelGrad = Instance.new("UIGradient")
     labelGrad.Color = Visual.getAuroraSequence(os.clock())
     labelGrad.Transparency = NumberSequence.new({
@@ -2083,6 +2116,11 @@ function Visual.makeInfo(pi, text)
         NumberSequenceKeypoint.new(1, 0.45)
     })
     labelGrad.Parent = label
+    table.insert(Visual.themeCallbacks, function()
+        pcall(function()
+            if labelGrad then labelGrad.Color = Visual.getAuroraSequence(os.clock()) end
+        end)
+    end)
 end
 
 function Visual.makeLabel(pi)
@@ -2097,9 +2135,17 @@ function Visual.makeLabel(pi)
     label.ZIndex = 20
     label.LayoutOrder = nextOrder(pi)
     label.Parent = tabPages[pi]
+    local stroke = Instance.new("UIStroke")
+    stroke.Transparency = 0.4
+    stroke.Parent = label
     local labelGrad = Instance.new("UIGradient")
     labelGrad.Color = Visual.getAuroraSequence(os.clock())
     labelGrad.Parent = label
+    table.insert(Visual.themeCallbacks, function()
+        pcall(function()
+            if labelGrad then labelGrad.Color = Visual.getAuroraSequence(os.clock()) end
+        end)
+    end)
     return label
 end
 
@@ -2107,7 +2153,7 @@ function Visual.makeButton(pi, text, callback)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, -4, 0, 36)
     row.BackgroundColor3 = Color3.new(1, 1, 1)
-    row.BackgroundTransparency = 0.14
+    row.BackgroundTransparency = 0.45
     row.BorderSizePixel = 0
     row.ZIndex = 18
     row.LayoutOrder = nextOrder(pi)
@@ -2119,8 +2165,8 @@ function Visual.makeButton(pi, text, callback)
     rowGrad.Color = Visual.getAuroraSequence(os.clock())
     rowGrad.Rotation = 20
     rowGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.3),
-        NumberSequenceKeypoint.new(1, 0.12)
+        NumberSequenceKeypoint.new(0, 0.6),
+        NumberSequenceKeypoint.new(1, 0.35)
     })
     rowGrad.Parent = row
 
@@ -2134,15 +2180,18 @@ function Visual.makeButton(pi, text, callback)
     label.TextXAlignment = Enum.TextXAlignment.Center
     label.ZIndex = 20
     label.Parent = row
+    local stroke = Instance.new("UIStroke")
+    stroke.Transparency = 0.4
+    stroke.Parent = label
     local labelGrad = Instance.new("UIGradient")
     labelGrad.Color = Visual.getAuroraSequence(os.clock())
     labelGrad.Parent = label
 
     row.MouseEnter:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.06}):Play()
+        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.25}):Play()
     end)
     row.MouseLeave:Connect(function()
-        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.14}):Play()
+        TweenService:Create(row, TweenInfo.new(0.15), {BackgroundTransparency = 0.45}):Play()
     end)
 
     local btn = Instance.new("TextButton")
