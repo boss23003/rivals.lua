@@ -1,7 +1,7 @@
 --[[
     MOON v3.5 — VISUAL MODULE (UNIFIED)
     Aurora/Moon gradient system, animated binds, rage overlay,
-    moon crescent, chams, UI sounds, full architecture
+    moon crescent, chams, UI sounds, Color Engine, full architecture
 ]]
 local Visual = {}
 local Players = game:GetService("Players")
@@ -9,6 +9,7 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local SoundService = game:GetService("SoundService")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 local BASE_W = 1920
 local BASE_H = 1080
@@ -21,6 +22,14 @@ local auroraColors = {
     Color3.fromRGB(240, 240, 255)
 }
 local auroraCount = #auroraColors
+local moonThemeColors = {
+    Color3.fromRGB(200, 210, 240),
+    Color3.fromRGB(150, 170, 230),
+    Color3.fromRGB(180, 190, 255),
+    Color3.fromRGB(220, 230, 250),
+    Color3.fromRGB(170, 180, 220)
+}
+local moonCount = #moonThemeColors
 function Visual.getAuroraColor(t, offset)
     offset = offset or 0
     local speed = 0.35
@@ -167,29 +176,40 @@ Visual.UIConfigs = {
     BackgroundAnimate = false,
     TopBarAnimate = false,
     ButtonMode = 1,
-    StrokeColor = Color3.new(0,0,0),
+    StrokeColor = Color3.new(0, 0, 0),
     StrokeTransparency = 0.15
 }
+Visual._uiConnections = {}
 function Visual.getColor(t, offset)
     local cfg = Visual.UIConfigs
+    offset = offset or 0
+    local spd = cfg.ColorSpeed or 0.35
     if cfg.ThemeMode == 1 then
-        return Visual.getAuroraColor(t, offset)
+        local idx = ((t * spd + offset) % auroraCount)
+        local i1 = math.floor(idx) % auroraCount + 1
+        local i2 = (i1 % auroraCount) + 1
+        local frac = idx - math.floor(idx)
+        return auroraColors[i1]:Lerp(auroraColors[i2], frac)
     elseif cfg.ThemeMode == 2 then
-        return Color3.fromRGB(255, 255, 255):Lerp(Color3.fromRGB(180, 190, 255), math.sin(t * cfg.ColorSpeed + offset) * 0.5 + 0.5)
+        local idx = ((t * spd + offset) % moonCount)
+        local i1 = math.floor(idx) % moonCount + 1
+        local i2 = (i1 % moonCount) + 1
+        local frac = idx - math.floor(idx)
+        return moonThemeColors[i1]:Lerp(moonThemeColors[i2], frac)
     elseif cfg.ThemeMode == 3 then
         return Color3.fromRGB(220, 225, 255)
     elseif cfg.ThemeMode == 4 then
         local colors = cfg.CustomColors
         local count = #colors
-        if count == 0 then return Color3.new(1,1,1) end
+        if count == 0 then return Color3.new(1, 1, 1) end
         if count == 1 then return colors[1] end
-        local idx = ((t * cfg.ColorSpeed + offset) % count)
+        local idx = ((t * spd + offset) % count)
         local i1 = math.floor(idx) % count + 1
         local i2 = (i1 % count) + 1
         local frac = idx - math.floor(idx)
         return colors[i1]:Lerp(colors[i2], frac)
     end
-    return Color3.new(1,1,1)
+    return Color3.new(1, 1, 1)
 end
 function Visual.getSequence(t)
     return ColorSequence.new({
@@ -198,9 +218,24 @@ function Visual.getSequence(t)
         ColorSequenceKeypoint.new(1, Visual.getColor(t, 4))
     })
 end
+function Visual.getStrokeColor(t, offset)
+    offset = offset or 0
+    local base = Visual.getColor(t, offset)
+    local mix = 1 - (Visual.UIConfigs.StrokeTransparency or 0.15)
+    return base:Lerp(Color3.new(0, 0, 0), 0.7 * mix)
+end
+function Visual.getStrokeSequence(t)
+    return ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Visual.getStrokeColor(t, 0)),
+        ColorSequenceKeypoint.new(0.5, Visual.getStrokeColor(t, 2)),
+        ColorSequenceKeypoint.new(1, Visual.getStrokeColor(t, 4))
+    })
+end
 Visual.ColorEngine = {
     GetColor = Visual.getColor,
-    GetSequence = Visual.getSequence
+    GetSequence = Visual.getSequence,
+    GetStrokeColor = Visual.getStrokeColor,
+    GetStrokeSequence = Visual.getStrokeSequence
 }
 local notifyList = Instance.new("Frame")
 notifyList.Size = UDim2.new(0, 330, 1, -40)
@@ -234,13 +269,13 @@ function Visual.Notify(title, text, duration, color)
         NumberSequenceKeypoint.new(1, 0.15)
     })
     bgGrad.Parent = frame
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.2
-    stroke.Transparency = 0.1
-    stroke.Parent = frame
-    local strokeGrad = Instance.new("UIGradient")
-    strokeGrad.Color = Visual.getAuroraSequence(os.clock())
-    strokeGrad.Parent = stroke
+    local frameStroke = Instance.new("UIStroke")
+    frameStroke.Thickness = 1.2
+    frameStroke.Transparency = 0.1
+    frameStroke.Parent = frame
+    local frameStrokeGrad = Instance.new("UIGradient")
+    frameStrokeGrad.Color = Visual.getAuroraSequence(os.clock())
+    frameStrokeGrad.Parent = frameStroke
     local titleLabel = Instance.new("TextLabel")
     titleLabel.Size = UDim2.new(1, -16, 0, 18)
     titleLabel.Position = UDim2.new(0, 12, 0, 7)
@@ -553,7 +588,7 @@ function Visual.createChams(character, color)
         return existing
     end
     local highlight = Instance.new("Highlight")
-    highlight.Name = "LunaChams"
+    highlight.Name = "MoonChams"
     highlight.FillColor = color or Visual.getAuroraColor(os.clock(), 0)
     highlight.FillTransparency = 0.65
     highlight.OutlineColor = color or Visual.getAuroraColor(os.clock(), 1)
@@ -590,11 +625,11 @@ function Visual.updateChams(targets, CFG)
     for _, tg in ipairs(targets) do
         if tg.char and tg.char.Parent then
             activeChars[tg.char] = true
-            local col = Visual.getAuroraColor(os.clock(), 0)
+            local col = Visual.getColor(os.clock(), 0)
             local h = Visual._chamsCache[tg.char]
             if h and h.Parent then
                 h.FillColor = col
-                h.OutlineColor = Visual.getAuroraColor(os.clock(), 1.5)
+                h.OutlineColor = Visual.getColor(os.clock(), 1.5)
                 h.FillTransparency = CFG.ChamsFillTransparency or 0.65
                 h.OutlineTransparency = CFG.ChamsOutlineTransparency or 0.1
             else
@@ -1090,11 +1125,11 @@ moonButtonText.TextSize = 13
 moonButtonText.Font = Enum.Font.GothamBold
 moonButtonText.ZIndex = 16
 moonButtonText.Parent = moonButton
-local moonStroke = Instance.new("UIStroke")
-moonStroke.Thickness = 1.2
-moonStroke.Color = Color3.new(0, 0, 0)
-moonStroke.Transparency = 0.1
-moonStroke.Parent = moonButtonText
+local moonBtnStroke = Instance.new("UIStroke")
+moonBtnStroke.Thickness = 1.2
+moonBtnStroke.Color = Color3.new(0, 0, 0)
+moonBtnStroke.Transparency = 0.1
+moonBtnStroke.Parent = moonButtonText
 local moonButtonTextGrad = Instance.new("UIGradient")
 moonButtonTextGrad.Color = Visual.getAuroraSequence(os.clock())
 moonButtonTextGrad.Parent = moonButtonText
@@ -1240,7 +1275,12 @@ local function makeTitleButton(text, xOffset, callback)
     return button, grad
 end
 local closeButton, closeButtonGrad = makeTitleButton("\195\151", -38, function()
-    if Visual._onClose then Visual._onClose() end
+    if Visual._onClose then
+        Visual._onClose()
+    else
+        Visual.closeMenu({WindowMode = 1})
+        Visual.destroy()
+    end
 end)
 Visual._closeBtn = closeButton
 Visual._closeBtnG = closeButtonGrad
@@ -1376,12 +1416,12 @@ for i = 1, 7 do
     layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         page.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
     end)
-    local padding = Instance.new("UIPadding")
-    padding.PaddingTop = UDim.new(0, 10)
-    padding.PaddingLeft = UDim.new(0, 16)
-    padding.PaddingRight = UDim.new(0, 16)
-    padding.PaddingBottom = UDim.new(0, 16)
-    padding.Parent = page
+    local pagePadding = Instance.new("UIPadding")
+    pagePadding.PaddingTop = UDim.new(0, 10)
+    pagePadding.PaddingLeft = UDim.new(0, 16)
+    pagePadding.PaddingRight = UDim.new(0, 16)
+    pagePadding.PaddingBottom = UDim.new(0, 16)
+    pagePadding.Parent = page
     tabPages[i] = page
     pageOrders[i] = 0
 end
@@ -1633,10 +1673,10 @@ function Visual.makeToggle(pi, text, key, CFG, callback)
     end)
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
-            if labelGrad then labelGrad.Color = Visual.getAuroraSequence(os.clock()) end
-            pillGrad.Color = Visual.getAuroraSequence(os.clock())
-            glow.BackgroundColor3 = Visual.getAuroraColor(os.clock(), 0)
-            rowGrad.Color = Visual.getAuroraSequence(os.clock())
+            if labelGrad then labelGrad.Color = Visual.ColorEngine.GetSequence(os.clock()) end
+            pillGrad.Color = Visual.ColorEngine.GetSequence(os.clock())
+            glow.BackgroundColor3 = Visual.getColor(os.clock(), 0)
+            rowGrad.Color = Visual.ColorEngine.GetSequence(os.clock())
         end)
     end)
 end
@@ -1688,11 +1728,11 @@ function Visual.makeSlider(pi, text, key, mn, mx, step, CFG, allConnections)
     valLabel.TextXAlignment = Enum.TextXAlignment.Right
     valLabel.ZIndex = 20
     valLabel.Parent = row
-    local stroke2 = Instance.new("UIStroke")
-    stroke2.Thickness = 1.2
-    stroke2.Color = Color3.new(0, 0, 0)
-    stroke2.Transparency = 0.15
-    stroke2.Parent = valLabel
+    local valStroke = Instance.new("UIStroke")
+    valStroke.Thickness = 1.2
+    valStroke.Color = Color3.new(0, 0, 0)
+    valStroke.Transparency = 0.15
+    valStroke.Parent = valLabel
     local valGrad = Instance.new("UIGradient")
     valGrad.Color = Visual.getAuroraSequence(os.clock())
     valGrad.Parent = valLabel
@@ -1748,10 +1788,10 @@ function Visual.makeSlider(pi, text, key, mn, mx, step, CFG, allConnections)
     knobStroke.Parent = knob
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
-            if labelGrad then labelGrad.Color = Visual.getAuroraSequence(os.clock()) end
-            if valGrad then valGrad.Color = Visual.getAuroraSequence(os.clock() + 0.5) end
-            fillGrad.Color = Visual.getAuroraSequence(os.clock())
-            knobGrad.Color = Visual.getAuroraSequence(os.clock())
+            if labelGrad then labelGrad.Color = Visual.ColorEngine.GetSequence(os.clock()) end
+            if valGrad then valGrad.Color = Visual.ColorEngine.GetSequence(os.clock() + 0.5) end
+            fillGrad.Color = Visual.ColorEngine.GetSequence(os.clock())
+            knobGrad.Color = Visual.ColorEngine.GetSequence(os.clock())
         end)
     end)
     local dragging = false
@@ -1869,9 +1909,9 @@ function Visual.makeCycle(pi, text, opts, key, CFG, callback)
     end)
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
-            if labelGrad1 then labelGrad1.Color = Visual.getAuroraSequence(os.clock()) end
-            if valGrad then valGrad.Color = Visual.getAuroraSequence(os.clock() + 0.5) end
-            if rowGrad then rowGrad.Color = Visual.getAuroraSequence(os.clock()) end
+            if labelGrad1 then labelGrad1.Color = Visual.ColorEngine.GetSequence(os.clock()) end
+            if valGrad then valGrad.Color = Visual.ColorEngine.GetSequence(os.clock() + 0.5) end
+            if rowGrad then rowGrad.Color = Visual.ColorEngine.GetSequence(os.clock()) end
         end)
     end)
 end
@@ -1975,9 +2015,9 @@ function Visual.makeRebind(pi, text, cfgKey, CFG, allConnections)
     end)
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
-            if labelGrad2 then labelGrad2.Color = Visual.getAuroraSequence(os.clock()) end
-            if valGrad then valGrad.Color = Visual.getAuroraSequence(os.clock() + 0.5) end
-            if rowGrad then rowGrad.Color = Visual.getAuroraSequence(os.clock()) end
+            if labelGrad2 then labelGrad2.Color = Visual.ColorEngine.GetSequence(os.clock()) end
+            if valGrad then valGrad.Color = Visual.ColorEngine.GetSequence(os.clock() + 0.5) end
+            if rowGrad then rowGrad.Color = Visual.ColorEngine.GetSequence(os.clock()) end
         end)
     end)
 end
@@ -2007,7 +2047,7 @@ function Visual.makeInfo(pi, text)
     labelGrad.Parent = label
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
-            if labelGrad then labelGrad.Color = Visual.getAuroraSequence(os.clock()) end
+            if labelGrad then labelGrad.Color = Visual.ColorEngine.GetSequence(os.clock()) end
         end)
     end)
 end
@@ -2033,7 +2073,7 @@ function Visual.makeLabel(pi)
     labelGrad.Parent = label
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
-            if labelGrad then labelGrad.Color = Visual.getAuroraSequence(os.clock()) end
+            if labelGrad then labelGrad.Color = Visual.ColorEngine.GetSequence(os.clock()) end
         end)
     end)
     return label
@@ -2160,6 +2200,7 @@ function Visual.closeMenu(CFG)
         if savedMouseIconEnabled ~= nil then UserInputService.MouseIconEnabled = savedMouseIconEnabled end
     end)
 end
+    end
 function Visual.handleDrag(inputPos)
     if Visual._dragState.drag and Visual._dragState.start and Visual._dragState.pos then
         local delta = inputPos - Visual._dragState.start
@@ -2180,568 +2221,1087 @@ function Visual.handleDrag(inputPos)
         )
     end
 end
-local themeTimer = 0
-function Visual.updateAnimations(dt, globalT)
-    local seq = Visual.ColorEngine.GetSequence(globalT)
-    pcall(function() watermarkGrad.Color = seq end)
-    pcall(function() watermarkStrokeGrad.Color = seq end)
-    pcall(function() watermarkTitleGrad.Color = seq end)
-    pcall(function() watermarkTimeGrad.Color = seq end)
-    pcall(function() watermarkTime.Text = os.date("%H:%M") end)
-    pcall(function() bindsGrad.Color = seq end)
-    pcall(function() bindsStrokeGrad.Color = seq end)
-    pcall(function() bindsTitleGrad.Color = seq end)
-    pcall(function() hudGrad.Color = seq end)
-    pcall(function() hudStrokeGrad.Color = seq end)
-    if not menuOpen then return end
-    pcall(function() titleBarGrad.Color = seq end)
-    pcall(function() titleLineGrad.Color = seq end)
-    pcall(function() tabBarGrad.Color = seq end)
-    pcall(function() tabIndicatorGrad.Color = seq end)
-    pcall(function() moonButtonGrad.Color = seq end)
-    pcall(function() moonButtonTextGrad.Color = seq end)
-    pcall(function() statusGrad.Color = seq end)
-    pcall(function() fpsGrad.Color = seq end)
-    pcall(function() killsGrad.Color = seq end)
-    pcall(function() pingGrad.Color = seq end)
-    pcall(function() mainGrad.Color = seq end)
-    pcall(function() mainStrokeGrad.Color = seq end)
-    pcall(function() fullAuroraGrad.Color = seq end)
-    pcall(function() moonOuterGrad.Color = seq end)
-    pcall(function() if closeButtonGrad then closeButtonGrad.Color = seq end end)
-    pcall(function() if minimizeButtonGrad then minimizeButtonGrad.Color = seq end end)
-    themeTimer = themeTimer + dt
-    if themeTimer > 0.05 then
-        themeTimer = 0
-        for _, cb in ipairs(Visual.themeCallbacks) do pcall(cb) end
+
+-- ═══════════════════════════════════════════════════════
+-- PART 2 — UPDATE LOOP, ESP, FOV CIRCLE, CONFIG SYSTEM,
+-- RAGE SPIN, KILL TRACKING, THEME ENGINE, DESTROY
+-- ═══════════════════════════════════════════════════════
+
+UserInputService.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement then
+        Visual.handleDrag(input.Position)
     end
-    for idx, star in ipairs(stars) do
-        pcall(function()
-            star.BackgroundTransparency = 0.5 + math.sin(globalT * (1 + idx * 0.2)) * 0.3
-            if Visual.isRageMode then
-                star.BackgroundColor3 = Visual.getAuroraColor(globalT, idx * 0.2):Lerp(Color3.fromRGB(255, 60, 90), 0.35)
-            else
-                star.BackgroundColor3 = Visual.getAuroraColor(globalT, idx * 0.3)
-            end
-        end)
-    end
-    pcall(function()
-        moonCanvas.Rotation = math.sin(globalT * 0.6) * 6
-        moonCanvas.Position = UDim2.new(
-            1, -148 + math.floor(math.sin(globalT * 1.2) * 3),
-            0, 90 + math.floor(math.cos(globalT) * 2)
-        )
-    end)
+end)
+
+-- ── FOV Circle (Drawing API) ──
+Visual._fovCircle = nil
+Visual._fovVisible = false
+
+function Visual.createFOVCircle()
+	if Visual._fovCircle then return Visual._fovCircle end
+	local ok, circle = pcall(function()
+		local c = Drawing.new("Circle")
+		c.Thickness = 1.5
+		c.NumSides = 128
+		c.Radius = 100
+		c.Filled = false
+		c.Visible = false
+		c.Transparency = 0.8
+		c.Color = Color3.fromRGB(200, 200, 255)
+		return c
+	end)
+	if ok and circle then
+		Visual._fovCircle = circle
+		return circle
+	end
+	return nil
 end
+
+function Visual.updateFOVCircle(CFG, forceHide)
+	local circle = Visual._fovCircle or Visual.createFOVCircle()
+	if not circle then return end
+
+	if forceHide or Visual.isOpen or not CFG.ShowFOV then
+		circle.Visible = false
+		Visual._fovVisible = false
+		return
+	end
+
+	local cam = workspace.CurrentCamera
+	if not cam then
+		circle.Visible = false
+		return
+	end
+
+	local vp = cam.ViewportSize
+	local centerX = vp.X * 0.5
+	local centerY = vp.Y * 0.5
+
+	-- Правильный расчет радиуса FOV круга (идеально круглый)
+	local scale = math.min(vp.X, vp.Y) / 1080
+	local radius = (CFG.FOVRadius or 100) * scale
+
+	circle.Position = Vector2.new(centerX, centerY)
+	circle.Radius = radius
+	circle.NumSides = 128
+	circle.Thickness = CFG.FOVThickness or 1.5
+
+	-- Color Engine интеграция
+	if CFG.FOVMatchGUI then
+		circle.Color = Visual.getColor(os.clock(), 0.5)
+	else
+		circle.Color = CFG.FOVColor or Color3.fromRGB(200, 200, 255)
+	end
+
+	circle.Transparency = CFG.FOVTransparency or 0.8
+	circle.Visible = true
+	Visual._fovVisible = true
+end
+
+function Visual.hideFOVCircle()
+	if Visual._fovCircle then
+		Visual._fovCircle.Visible = false
+		Visual._fovVisible = false
+	end
+end
+
+-- ── ESP System (Drawing API) ──
+Visual._espCache = {}
+Visual._espEnabled = false
+
+local ESP_COLORS = {
+	Name = Color3.fromRGB(255, 255, 255),
+	Health = Color3.fromRGB(100, 255, 100),
+	Distance = Color3.fromRGB(200, 200, 255),
+	Box = Color3.fromRGB(255, 255, 255),
+	Tracer = Color3.fromRGB(200, 200, 255)
+}
+
+function Visual.createESPForPlayer(player)
+	if Visual._espCache[player] then return Visual._espCache[player] end
+
+	local ok, esp = pcall(function()
+		local data = {}
+		data.nameText = Drawing.new("Text")
+		data.nameText.Size = 13
+		data.nameText.Center = true
+		data.nameText.Outline = true
+		data.nameText.OutlineColor = Color3.new(0, 0, 0)
+		data.nameText.Font = 2
+		data.nameText.Visible = false
+
+		data.distText = Drawing.new("Text")
+		data.distText.Size = 11
+		data.distText.Center = true
+		data.distText.Outline = true
+		data.distText.OutlineColor = Color3.new(0, 0, 0)
+		data.distText.Font = 2
+		data.distText.Visible = false
+
+		data.healthText = Drawing.new("Text")
+		data.healthText.Size = 11
+		data.healthText.Center = true
+		data.healthText.Outline = true
+		data.healthText.OutlineColor = Color3.new(0, 0, 0)
+		data.healthText.Font = 2
+		data.healthText.Visible = false
+
+		data.box = {
+			Drawing.new("Line"),
+			Drawing.new("Line"),
+			Drawing.new("Line"),
+			Drawing.new("Line")
+		}
+		for _, line in ipairs(data.box) do
+			line.Thickness = 1.2
+			line.Visible = false
+		end
+
+		data.tracer = Drawing.new("Line")
+		data.tracer.Thickness = 1
+		data.tracer.Visible = false
+
+		data.healthBar = {
+			bg = Drawing.new("Line"),
+			fill = Drawing.new("Line")
+		}
+		data.healthBar.bg.Thickness = 3
+		data.healthBar.bg.Visible = false
+		data.healthBar.fill.Thickness = 2
+		data.healthBar.fill.Visible = false
+
+		return data
+	end)
+
+	if ok and esp then
+		Visual._espCache[player] = esp
+		return esp
+	end
+	return nil
+end
+
+function Visual.removeESPForPlayer(player)
+	local esp = Visual._espCache[player]
+	if not esp then return end
+
+	pcall(function()
+		if esp.nameText then esp.nameText:Remove() end
+		if esp.distText then esp.distText:Remove() end
+		if esp.healthText then esp.healthText:Remove() end
+		if esp.box then
+			for _, line in ipairs(esp.box) do line:Remove() end
+		end
+		if esp.tracer then esp.tracer:Remove() end
+		if esp.healthBar then
+			if esp.healthBar.bg then esp.healthBar.bg:Remove() end
+			if esp.healthBar.fill then esp.healthBar.fill:Remove() end
+		end
+	end)
+
+	Visual._espCache[player] = nil
+end
+
+function Visual.removeAllESP()
+	for player, _ in pairs(Visual._espCache) do
+		Visual.removeESPForPlayer(player)
+	end
+	Visual._espCache = {}
+end
+
+function Visual.hideESPEntry(esp)
+	if not esp then return end
+	pcall(function()
+		if esp.nameText then esp.nameText.Visible = false end
+		if esp.distText then esp.distText.Visible = false end
+		if esp.healthText then esp.healthText.Visible = false end
+		if esp.box then
+			for _, line in ipairs(esp.box) do line.Visible = false end
+		end
+		if esp.tracer then esp.tracer.Visible = false end
+		if esp.healthBar then
+			if esp.healthBar.bg then esp.healthBar.bg.Visible = false end
+			if esp.healthBar.fill then esp.healthBar.fill.Visible = false end
+		end
+	end)
+end
+
+function Visual.updateESP(targets, CFG)
+	if not CFG.ShowESP or Visual.isOpen then
+		if Visual._espEnabled then
+			for _, esp in pairs(Visual._espCache) do
+				Visual.hideESPEntry(esp)
+			end
+			Visual._espEnabled = false
+		end
+		return
+	end
+
+	Visual._espEnabled = true
+	local cam = workspace.CurrentCamera
+	if not cam then return end
+
+	local vp = cam.ViewportSize
+	local activeSet = {}
+
+	-- Color Engine для ESP
+	local useGUIColor = CFG.ESPMatchGUI
+	local t = os.clock()
+	local espNameColor = useGUIColor and Visual.getColor(t, 0) or (CFG.ESPNameColor or ESP_COLORS.Name)
+	local espBoxColor = useGUIColor and Visual.getColor(t, 0.5) or (CFG.ESPBoxColor or ESP_COLORS.Box)
+	local espTracerColor = useGUIColor and Visual.getColor(t, 1.0) or (CFG.ESPTracerColor or ESP_COLORS.Tracer)
+	local espDistColor = useGUIColor and Visual.getColor(t, 1.5) or (CFG.ESPDistColor or ESP_COLORS.Distance)
+
+	for _, tg in ipairs(targets) do
+		local player = tg.player
+		local char = tg.char
+		local hrp = tg.hrp
+		if player and char and hrp and char.Parent then
+			activeSet[player] = true
+			local esp = Visual._espCache[player] or Visual.createESPForPlayer(player)
+			if not esp then continue end
+
+			local pos, onScreen = cam:WorldToViewportPoint(hrp.Position)
+			if not onScreen then
+				Visual.hideESPEntry(esp)
+				continue
+			end
+
+			local head = char:FindFirstChild("Head")
+			local rootPos = Vector2.new(pos.X, pos.Y)
+
+			-- Расстояние
+			local localHRP = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+			local dist = localHRP and (hrp.Position - localHRP.Position).Magnitude or 0
+
+			-- Здоровье
+			local humanoid = char:FindFirstChildOfClass("Humanoid")
+			local hp = humanoid and humanoid.Health or 100
+			local maxHp = humanoid and humanoid.MaxHealth or 100
+			local hpFrac = math.clamp(hp / math.max(maxHp, 1), 0, 1)
+
+			-- Размер бокса
+			local headPos = head and cam:WorldToViewportPoint(head.Position + Vector3.new(0, 1.5, 0))
+			local footPos = cam:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
+
+			if headPos and footPos then
+				local top = Vector2.new(headPos.X, headPos.Y)
+				local bottom = Vector2.new(footPos.X, footPos.Y)
+				local height = math.abs(bottom.Y - top.Y)
+				local width = height * 0.55
+
+				local cx = (top.X + bottom.X) * 0.5
+
+				-- Box
+				if CFG.ESPBox ~= false then
+					local tl = Vector2.new(cx - width * 0.5, top.Y)
+					local tr = Vector2.new(cx + width * 0.5, top.Y)
+					local bl = Vector2.new(cx - width * 0.5, bottom.Y)
+					local br = Vector2.new(cx + width * 0.5, bottom.Y)
+
+					esp.box[1].From = tl; esp.box[1].To = tr
+					esp.box[2].From = tr; esp.box[2].To = br
+					esp.box[3].From = br; esp.box[3].To = bl
+					esp.box[4].From = bl; esp.box[4].To = tl
+
+					for _, line in ipairs(esp.box) do
+						line.Color = espBoxColor
+						line.Visible = true
+					end
+				else
+					for _, line in ipairs(esp.box) do line.Visible = false end
+				end
+
+				-- Name
+				esp.nameText.Text = player.DisplayName or player.Name
+				esp.nameText.Position = Vector2.new(cx, top.Y - 16)
+				esp.nameText.Color = espNameColor
+				esp.nameText.Visible = CFG.ESPName ~= false
+
+				-- Distance
+				esp.distText.Text = string.format("%.0fm", dist)
+				esp.distText.Position = Vector2.new(cx, bottom.Y + 3)
+				esp.distText.Color = espDistColor
+				esp.distText.Visible = CFG.ESPDistance ~= false
+
+				-- Health text
+				esp.healthText.Text = string.format("%.0f HP", hp)
+				esp.healthText.Position = Vector2.new(cx + width * 0.5 + 18, top.Y + height * 0.5 - 6)
+				esp.healthText.Color = Color3.fromRGB(
+					255 * (1 - hpFrac),
+					255 * hpFrac,
+					50
+				)
+				esp.healthText.Visible = CFG.ESPHealth ~= false
+
+				-- Health bar
+				if CFG.ESPHealthBar ~= false then
+					local barX = cx - width * 0.5 - 5
+					esp.healthBar.bg.From = Vector2.new(barX, bottom.Y)
+					esp.healthBar.bg.To = Vector2.new(barX, top.Y)
+					esp.healthBar.bg.Color = Color3.fromRGB(40, 40, 40)
+					esp.healthBar.bg.Visible = true
+
+					local fillTop = bottom.Y - (bottom.Y - top.Y) * hpFrac
+					esp.healthBar.fill.From = Vector2.new(barX, bottom.Y)
+					esp.healthBar.fill.To = Vector2.new(barX, fillTop)
+					esp.healthBar.fill.Color = Color3.fromRGB(
+						255 * (1 - hpFrac),
+						255 * hpFrac,
+						50
+					)
+					esp.healthBar.fill.Visible = true
+				else
+					esp.healthBar.bg.Visible = false
+					esp.healthBar.fill.Visible = false
+				end
+
+				-- Tracer
+				if CFG.ESPTracer ~= false then
+					esp.tracer.From = Vector2.new(vp.X * 0.5, vp.Y)
+					esp.tracer.To = Vector2.new(cx, bottom.Y)
+					esp.tracer.Color = espTracerColor
+					esp.tracer.Visible = true
+				else
+					esp.tracer.Visible = false
+				end
+			else
+				Visual.hideESPEntry(esp)
+			end
+		end
+	end
+
+	-- Удалить ESP для игроков которых больше нет
+	for player, esp in pairs(Visual._espCache) do
+		if not activeSet[player] then
+			Visual.hideESPEntry(esp)
+		end
+	end
+end
+
+-- ── Kill Tracking System (исправленная) ──
+Visual._killData = {
+	count = 0,
+	aimedPlayers = {},   -- [player] = true (на кого наводился аим)
+	healthCache = {},    -- [player] = lastHP
+	deadPlayers = {}     -- [player] = true (уже засчитали смерть)
+}
+
+function Visual.markAimedPlayer(player)
+	if player and player ~= LocalPlayer then
+		Visual._killData.aimedPlayers[player] = os.clock()
+	end
+end
+
+function Visual.updateKillTracking(targets)
+	local kd = Visual._killData
+
+	-- Обновить кеш здоровья и проверить смерти
+	for _, tg in ipairs(targets or {}) do
+		local player = tg.player
+		local char = tg.char
+		if player and char and char.Parent then
+			local hum = char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				local prevHP = kd.healthCache[player]
+				local curHP = hum.Health
+
+				-- Игрок умер (HP стало 0) и мы на него наводились
+				if prevHP and prevHP > 0 and curHP <= 0 then
+					if kd.aimedPlayers[player] and not kd.deadPlayers[player] then
+						local aimTime = kd.aimedPlayers[player]
+						-- Наводились не более 15 секунд назад
+						if os.clock() - aimTime < 15 then
+							kd.count = kd.count + 1
+							kd.deadPlayers[player] = true
+							Visual.NotifyKill(player.DisplayName or player.Name)
+						end
+					end
+				end
+
+				kd.healthCache[player] = curHP
+
+				-- Если игрок жив снова (респавнился), сбросить dead флаг
+				if curHP > 0 then
+					kd.deadPlayers[player] = nil
+				end
+			end
+		end
+	end
+
+	-- Очистка отключившихся игроков
+	for player, _ in pairs(kd.aimedPlayers) do
+		if not player.Parent then
+			kd.aimedPlayers[player] = nil
+			kd.healthCache[player] = nil
+			kd.deadPlayers[player] = nil
+		end
+	end
+
+	-- Обновить GUI
+	if Visual.guiKills then
+		Visual.guiKills.Text = kd.count .. " kills"
+	end
+end
+
+function Visual.getKillCount()
+	return Visual._killData.count
+end
+
+function Visual.resetKillCount()
+	Visual._killData.count = 0
+	Visual._killData.aimedPlayers = {}
+	Visual._killData.healthCache = {}
+	Visual._killData.deadPlayers = {}
+end
+
+-- ── Rage Spin System ──
+Visual._rageSpin = {
+	active = false,
+	speed = 720,        -- градусов в секунду
+	angle = 0,
+	thirdPerson = true,
+	thirdPersonOffset = 12,
+	savedCameraType = nil,
+	savedCameraOffset = nil,
+	lastUpdate = 0,
+	pausedForAim = false
+}
+
+function Visual.startRageSpin(CFG)
+	local rs = Visual._rageSpin
+	if rs.active then return end
+
+	rs.active = true
+	rs.speed = CFG.SpinSpeed or 720
+	rs.thirdPerson = CFG.SpinThirdPerson ~= false
+	rs.thirdPersonOffset = CFG.SpinCameraOffset or 12
+	rs.lastUpdate = os.clock()
+	rs.angle = 0
+	rs.pausedForAim = false
+
+	-- Сохранить текущие настройки камеры
+	local cam = workspace.CurrentCamera
+	if cam then
+		rs.savedCameraType = cam.CameraType
+	end
+
+	local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	if hum then
+		rs.savedCameraOffset = hum.CameraOffset
+	end
+
+	-- Включить третье лицо
+	if rs.thirdPerson then
+		Visual._applyThirdPerson(rs.thirdPersonOffset)
+	end
+end
+
+function Visual.stopRageSpin()
+	local rs = Visual._rageSpin
+	if not rs.active then return end
+
+	rs.active = false
+	rs.pausedForAim = false
+
+	-- Восстановить камеру
+	local cam = workspace.CurrentCamera
+	if cam and rs.savedCameraType then
+		cam.CameraType = rs.savedCameraType
+	end
+
+	local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	if hum and rs.savedCameraOffset then
+		hum.CameraOffset = rs.savedCameraOffset
+	end
+end
+
+function Visual._applyThirdPerson(offset)
+	local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+	if hum then
+		hum.CameraOffset = Vector3.new(0, 0, offset or 12)
+	end
+end
+
+function Visual.updateRageSpin(hasTarget)
+	local rs = Visual._rageSpin
+	if not rs.active then return end
+
+	local now = os.clock()
+	local dt = now - rs.lastUpdate
+	rs.lastUpdate = now
+
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
+	if hasTarget then
+		-- Враг в FOV → пауза вращения, аим берёт управление
+		rs.pausedForAim = true
+		return
+	end
+
+	-- Нет врага → вращаемся
+	rs.pausedForAim = false
+	rs.angle = rs.angle + rs.speed * dt
+
+	-- Применить вращение
+	local rad = math.rad(rs.angle)
+	hrp.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(0, rad, 0)
+
+	-- Поддерживать третье лицо
+	if rs.thirdPerson then
+		Visual._applyThirdPerson(rs.thirdPersonOffset)
+	end
+end
+
+function Visual.isRageSpinActive()
+	return Visual._rageSpin.active
+end
+
+function Visual.isRageSpinPaused()
+	return Visual._rageSpin.pausedForAim
+end
+
+-- ── Config System (Base64) ──
+Visual.ConfigSystem = {}
+
+local CONFIG_KEYS = {
+	"Enabled", "FOVRadius", "Smoothness", "AimPart", "AimKey",
+	"Triggerbot", "TriggerDelay", "ShowFOV", "ShowESP", "ShowChams",
+	"FOVMatchGUI", "ESPMatchGUI", "DashEnabled", "DashKey",
+	"DashForce", "DashCooldown", "SpinSpeed", "SpinThirdPerson",
+	"SpinCameraOffset", "RageDash", "RageTarget", "RageSpin",
+	"WindowMode", "ESPBox", "ESPName", "ESPDistance", "ESPHealth",
+	"ESPHealthBar", "ESPTracer", "FOVThickness", "FOVTransparency",
+	"ChamsFillTransparency", "ChamsOutlineTransparency",
+	"TargetKey"
+}
+
+local UI_CONFIG_KEYS = {
+	"ThemeMode", "ColorSpeed", "ColorIntensity", "UITransparency",
+	"BackgroundAnimate", "TopBarAnimate", "ButtonMode",
+	"StrokeTransparency"
+}
+
+function Visual.ConfigSystem.Export(CFG)
+	local data = {}
+
+	for _, key in ipairs(CONFIG_KEYS) do
+		if CFG[key] ~= nil then
+			data[key] = CFG[key]
+		end
+	end
+
+	-- UI настройки
+	data._UI = {}
+	for _, key in ipairs(UI_CONFIG_KEYS) do
+		data._UI[key] = Visual.UIConfigs[key]
+	end
+
+	-- Custom цвета
+	if Visual.UIConfigs.CustomColors then
+		data._UI._CustomColors = {}
+		for i, col in ipairs(Visual.UIConfigs.CustomColors) do
+			data._UI._CustomColors[i] = {
+				math.floor(col.R * 255),
+				math.floor(col.G * 255),
+				math.floor(col.B * 255)
+			}
+		end
+	end
+
+	local jsonStr = HttpService:JSONEncode(data)
+	local encoded = nil
+
+	-- Base64 encode
+	pcall(function()
+		local b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+		encoded = ""
+		local bytes = {string.byte(jsonStr, 1, #jsonStr)}
+		local i = 1
+		while i <= #bytes do
+			local b1 = bytes[i] or 0
+			local b2 = bytes[i + 1] or 0
+			local b3 = bytes[i + 2] or 0
+
+			local n = b1 * 65536 + b2 * 256 + b3
+
+			local c1 = math.floor(n / 262144) % 64
+			local c2 = math.floor(n / 4096) % 64
+			local c3 = math.floor(n / 64) % 64
+			local c4 = n % 64
+
+			encoded = encoded
+				.. string.sub(b64, c1 + 1, c1 + 1)
+				.. string.sub(b64, c2 + 1, c2 + 1)
+				.. (i + 1 <= #bytes and string.sub(b64, c3 + 1, c3 + 1) or "=")
+				.. (i + 2 <= #bytes and string.sub(b64, c4 + 1, c4 + 1) or "=")
+
+			i = i + 3
+		end
+	end)
+
+	if encoded then
+		return "CFG-MOON-" .. encoded
+	end
+	return nil
+end
+
+function Visual.ConfigSystem.Import(cfgString, CFG)
+	if not cfgString or type(cfgString) ~= "string" then return false end
+
+	-- Убрать префикс
+	local encoded = cfgString
+	if encoded:sub(1, 9) == "CFG-MOON-" then
+		encoded = encoded:sub(10)
+	end
+
+	-- Base64 decode
+	local decoded = nil
+	pcall(function()
+		local b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+		local result = {}
+
+		local i = 1
+		while i <= #encoded do
+			local c1 = string.find(b64, encoded:sub(i, i), 1, true) or 1
+			local c2 = string.find(b64, encoded:sub(i + 1, i + 1), 1, true) or 1
+			local c3 = string.find(b64, encoded:sub(i + 2, i + 2), 1, true)
+			local c4 = string.find(b64, encoded:sub(i + 3, i + 3), 1, true)
+
+			c1 = c1 - 1; c2 = c2 - 1
+			c3 = c3 and (c3 - 1) or 0
+			c4 = c4 and (c4 - 1) or 0
+
+			local n = c1 * 262144 + c2 * 4096 + c3 * 64 + c4
+
+			table.insert(result, math.floor(n / 65536) % 256)
+			if encoded:sub(i + 2, i + 2) ~= "=" then
+				table.insert(result, math.floor(n / 256) % 256)
+			end
+			if encoded:sub(i + 3, i + 3) ~= "=" then
+				table.insert(result, n % 256)
+			end
+
+			i = i + 4
+		end
+
+		decoded = string.char(unpack(result))
+	end)
+
+	if not decoded then return false end
+
+	local ok, data = pcall(function()
+		return HttpService:JSONDecode(decoded)
+	end)
+	if not ok or type(data) ~= "table" then return false end
+
+	-- Применить настройки
+	for _, key in ipairs(CONFIG_KEYS) do
+		if data[key] ~= nil then
+			CFG[key] = data[key]
+		end
+	end
+
+	-- UI настройки
+	if data._UI then
+		for _, key in ipairs(UI_CONFIG_KEYS) do
+			if data._UI[key] ~= nil then
+				Visual.UIConfigs[key] = data._UI[key]
+			end
+		end
+		if data._UI._CustomColors then
+			Visual.UIConfigs.CustomColors = {}
+			for i, rgb in ipairs(data._UI._CustomColors) do
+				Visual.UIConfigs.CustomColors[i] = Color3.fromRGB(rgb[1], rgb[2], rgb[3])
+			end
+		end
+	end
+
+	return true
+end
+
+function Visual.ConfigSystem.SaveToFile(CFG, name)
+	name = name or "moon_config"
+	local str = Visual.ConfigSystem.Export(CFG)
+	if not str then return false end
+
+	pcall(function()
+		if writefile then
+			writefile(name .. ".mooncfg", str)
+		end
+	end)
+	return str
+end
+
+function Visual.ConfigSystem.LoadFromFile(CFG, name)
+	name = name or "moon_config"
+	local str = nil
+	pcall(function()
+		if readfile and isfile and isfile(name .. ".mooncfg") then
+			str = readfile(name .. ".mooncfg")
+		end
+	end)
+	if str then
+		return Visual.ConfigSystem.Import(str, CFG)
+	end
+	return false
+end
+
+-- ── UI Tab Builder ──
+function Visual.buildUITab(CFG, allConnections)
+	local pi = 5  -- UI tab page index
+
+	Visual.makeSection(pi, "THEME")
+
+	Visual.makeCycle(pi, "Theme Mode", {"Aurora", "Moon", "Classic", "Custom"}, "ThemeMode", Visual.UIConfigs, function(idx)
+		Visual.UIConfigs.ThemeMode = idx
+	end)
+
+	Visual.makeSlider(pi, "Color Speed", "ColorSpeed", 0.05, 2, 0.05, Visual.UIConfigs, allConnections)
+	Visual.makeSlider(pi, "Color Intensity", "ColorIntensity", 0.1, 2, 0.1, Visual.UIConfigs, allConnections)
+	Visual.makeSlider(pi, "UI Transparency", "UITransparency", 0, 0.9, 0.05, Visual.UIConfigs, allConnections)
+	Visual.makeSlider(pi, "Stroke Transparency", "StrokeTransparency", 0, 1, 0.05, Visual.UIConfigs, allConnections)
+
+	Visual.makeSection(pi, "ANIMATION")
+
+	Visual.makeToggle(pi, "Background Animate", "BackgroundAnimate", Visual.UIConfigs)
+	Visual.makeToggle(pi, "Top Bar Animate", "TopBarAnimate", Visual.UIConfigs)
+
+	Visual.makeCycle(pi, "Button Mode", {"Glow", "Gradient", "Hover", "Pulse"}, "ButtonMode", Visual.UIConfigs)
+
+	Visual.makeSection(pi, "CONFIG")
+
+	-- Экспорт конфига
+	local cfgExportLabel = Visual.makeLabel(pi)
+	cfgExportLabel.Text = ""
+	cfgExportLabel.TextSize = 9
+
+	Visual.makeButton(pi, "Export Config", function()
+		local str = Visual.ConfigSystem.Export(CFG)
+		if str then
+			pcall(function()
+				if setclipboard then
+					setclipboard(str)
+				end
+			end)
+			cfgExportLabel.Text = "Copied to clipboard!"
+			Visual.Notify("Config", "Config exported and copied!", 3)
+			task.delay(3, function()
+				if cfgExportLabel and cfgExportLabel.Parent then
+					cfgExportLabel.Text = ""
+				end
+			end)
+		end
+	end)
+
+	Visual.makeButton(pi, "Save Config to File", function()
+		local str = Visual.ConfigSystem.SaveToFile(CFG, "moon_config")
+		if str then
+			Visual.Notify("Config", "Saved to file!", 3)
+		end
+	end)
+
+	Visual.makeButton(pi, "Load Config from File", function()
+		local ok = Visual.ConfigSystem.LoadFromFile(CFG, "moon_config")
+		if ok then
+			Visual.Notify("Config", "Config loaded!", 3)
+		else
+			Visual.Notify("Config", "No config file found", 3, Color3.fromRGB(255, 100, 100))
+		end
+	end)
+
+	Visual.makeSection(pi, "INFO")
+	Visual.makeInfo(pi, "MOON v3.5 — Visual Module")
+	Visual.makeInfo(pi, "Theme applies to all UI elements")
+	Visual.makeInfo(pi, "Custom mode: edit colors in code")
+end
+
+-- ── Patch Notes Tab ──
+function Visual.buildPatchTab()
+	local pi = 7  -- Patch tab page index (mapped from tab 6/7)
+
+	Visual.makeSection(pi, "PATCH NOTES v3.5")
+	Visual.makeInfo(pi, "• Color Engine с 4 режимами")
+	Visual.makeInfo(pi, "• UI вкладка с полными настройками")
+	Visual.makeInfo(pi, "• Исправлен FOV круг (идеально круглый)")
+	Visual.makeInfo(pi, "• Исправлен Kill counter (no false kills)")
+	Visual.makeInfo(pi, "• Rage Spin с 3rd person")
+	Visual.makeInfo(pi, "• ESP использует Color Engine")
+	Visual.makeInfo(pi, "• Config система Base64")
+	Visual.makeInfo(pi, "• Обводка на всём тексте")
+	Visual.makeInfo(pi, "• Звуки UI")
+	Visual.makeInfo(pi, "• Animated binds panel")
+	Visual.makeInfo(pi, "• Moon crescent overlay")
+	Visual.makeInfo(pi, "• Chams с Color Engine")
+	Visual.makeInfo(pi, "• Кнопка X полностью уничтожает GUI")
+
+	Visual.makeSection(pi, "CREDITS")
+	Visual.makeInfo(pi, "MOON v3.5 by dev team")
+end
+
+-- ── Main Update Loop ──
+Visual._updateConnection = nil
+Visual._lastFPSUpdate = 0
+Visual._frameCount = 0
+Visual._currentFPS = 60
+
+function Visual.startUpdateLoop()
+	if Visual._updateConnection then return end
+
+	Visual._updateConnection = game:GetService("RunService").RenderStepped:Connect(function()
+		local t = os.clock()
+
+		-- FPS Counter
+		Visual._frameCount = Visual._frameCount + 1
+		if t - Visual._lastFPSUpdate >= 1 then
+			Visual._currentFPS = Visual._frameCount
+			Visual._frameCount = 0
+			Visual._lastFPSUpdate = t
+
+			if Visual.guiFPS then
+				Visual.guiFPS.Text = Visual._currentFPS .. " fps"
+			end
+		end
+
+		-- Watermark time
+		if Visual.wmTime then
+			Visual.wmTime.Text = os.date("%H:%M:%S")
+		end
+
+		-- Ping
+		if Visual.guiPing then
+			pcall(function()
+				local ping = game:GetService("Stats"):FindFirstChild("PerformanceStats")
+				if ping then
+					local p = ping:FindFirstChild("Ping")
+					if p then
+						Visual.guiPing.Text = math.floor(p:GetValue()) .. "ms"
+					end
+				end
+			end)
+		end
+
+		-- ── Theme/Color Engine Update ──
+		local seq = Visual.getSequence(t)
+		local stSeq = Visual.getStrokeSequence(t)
+
+		-- Watermark
+		pcall(function()
+			if Visual._wmGrad then Visual._wmGrad.Color = seq end
+			if Visual._wmStGrad then Visual._wmStGrad.Color = seq end
+			if Visual._wmTitleGrad then Visual._wmTitleGrad.Color = seq end
+			if Visual._wmTimeGrad then Visual._wmTimeGrad.Color = seq end
+		end)
+
+		-- Main window
+		pcall(function()
+			if Visual._gStGrad then Visual._gStGrad.Color = seq end
+			if Visual._tabIndGrad then Visual._tabIndGrad.Color = seq end
+			if Visual._tLGrad then Visual._tLGrad.Color = seq end
+		end)
+
+		-- Условная анимация фона
+		pcall(function()
+			if Visual.UIConfigs.BackgroundAnimate then
+				if Visual._mainGrad then Visual._mainGrad.Color = seq end
+			end
+			if Visual.UIConfigs.TopBarAnimate then
+				if Visual._titleBarGrad then Visual._titleBarGrad.Color = seq end
+				if Visual._tabBarGrad then Visual._tabBarGrad.Color = seq end
+			end
+		end)
+
+		-- FPS/kills/ping gradients
+		pcall(function()
+			if Visual._fpsGrad then Visual._fpsGrad.Color = seq end
+			if Visual._killsGrad then Visual._killsGrad.Color = seq end
+			if Visual._pingGrad then Visual._pingGrad.Color = seq end
+			if Visual._statusGrad then Visual._statusGrad.Color = seq end
+		end)
+
+		-- Moon button and close
+		pcall(function()
+			if Visual._moonBtnGrad then Visual._moonBtnGrad.Color = seq end
+			if Visual._moonBtnTxtGrad then Visual._moonBtnTxtGrad.Color = seq end
+			if Visual._closeBtnG then Visual._closeBtnG.Color = seq end
+			if Visual._minBtnG then Visual._minBtnG.Color = seq end
+		end)
+
+		-- Binds frame
+		pcall(function()
+			if Visual._bindsGrad then Visual._bindsGrad.Color = seq end
+			if Visual._bfStGrad then Visual._bfStGrad.Color = seq end
+			if Visual._bindsTitleGrad then Visual._bindsTitleGrad.Color = seq end
+		end)
+
+		-- HUD
+		pcall(function()
+			if Visual._hudGrad then Visual._hudGrad.Color = seq end
+			if Visual._hudStGrad then Visual._hudStGrad.Color = seq end
+		end)
+
+		-- Moon crescent
+		pcall(function()
+			if Visual._moonOuterGrad then Visual._moonOuterGrad.Color = seq end
+		end)
+
+		-- Full aurora overlay
+		pcall(function()
+			if Visual._fullAuroraGrad then Visual._fullAuroraGrad.Color = seq end
+		end)
+
+		-- Rage overlay gradient rotation
+		pcall(function()
+			if Visual._rageOverlay and Visual.isRageMode then
+				local rageSeq = ColorSequence.new({
+					ColorSequenceKeypoint.new(0, Color3.fromRGB(
+						255,
+						math.floor(60 + math.sin(t * 2) * 30),
+						math.floor(90 + math.cos(t * 1.5) * 40)
+					)),
+					ColorSequenceKeypoint.new(0.5, Color3.fromRGB(
+						math.floor(180 + math.sin(t * 1.7) * 40),
+						50,
+						math.floor(150 + math.cos(t * 2.1) * 50)
+					)),
+					ColorSequenceKeypoint.new(1, Color3.fromRGB(
+						255,
+						math.floor(120 + math.sin(t * 2.5) * 60),
+						math.floor(120 + math.cos(t * 1.3) * 50)
+					))
+				})
+				-- Обновить через дочерний UIGradient
+				local rg = Visual._rageOverlay:FindFirstChildOfClass("UIGradient")
+				if rg then
+					rg.Color = rageSeq
+					rg.Rotation = 45 + math.sin(t * 0.5) * 30
+				end
+			end
+		end)
+
+		-- Star twinkle
+		pcall(function()
+			if Visual.guiStars then
+				for i, star in ipairs(Visual.guiStars) do
+					if star and star.Parent then
+						star.BackgroundTransparency = 0.5 + 0.3 * math.sin(t * (1.2 + i * 0.15) + i)
+					end
+				end
+			end
+		end)
+
+		-- Theme callbacks (all registered UI elements)
+		for _, cb in ipairs(Visual.themeCallbacks) do
+			pcall(cb)
+		end
+	end)
+end
+
+-- ── Destroy Everything ──
+Visual._allConnections = {}
+
 function Visual.destroy()
-    Visual.removeAllChams()
-    pcall(function() blurMain:Destroy() end)
-    pcall(function() gui:Destroy() end)
-    pcall(function() screenGui:Destroy() end)
-    for _, s in pairs(soundCache) do
-        pcall(function() s:Destroy() end)
-    end
-    soundCache = {}
+	-- Остановить update loop
+	if Visual._updateConnection then
+		pcall(function() Visual._updateConnection:Disconnect() end)
+		Visual._updateConnection = nil
+	end
+
+	-- Отключить все connections
+	for _, conn in ipairs(Visual._allConnections) do
+		pcall(function() conn:Disconnect() end)
+	end
+	Visual._allConnections = {}
+
+	-- Очистить UI connections
+	for _, conn in ipairs(Visual._uiConnections) do
+		pcall(function() conn:Disconnect() end)
+	end
+	Visual._uiConnections = {}
+
+	-- Удалить ESP
+	Visual.removeAllESP()
+
+	-- Удалить Chams
+	Visual.removeAllChams()
+
+	-- Удалить FOV круг
+	if Visual._fovCircle then
+		pcall(function() Visual._fovCircle:Remove() end)
+		Visual._fovCircle = nil
+	end
+
+	-- Остановить Rage Spin
+	Visual.stopRageSpin()
+
+	-- Удалить GUI
+	pcall(function()
+		if Visual.screenGui then Visual.screenGui:Destroy() end
+	end)
+	pcall(function()
+		if Visual.gui then Visual.gui:Destroy() end
+	end)
+
+	-- Удалить blur
+	pcall(function()
+		if Visual.blurMain then Visual.blurMain:Destroy() end
+	end)
+
+	-- Удалить все moon эффекты из Lighting
+	for _, child in ipairs(Lighting:GetChildren()) do
+		if child.Name:find("Moon") then
+			pcall(function() child:Destroy() end)
+		end
+	end
+
+	-- Восстановить курсор
+	pcall(function()
+		UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+		UserInputService.MouseIconEnabled = true
+	end)
+
+	-- Очистить звуки
+	for _, sound in pairs(soundCache) do
+		pcall(function() sound:Destroy() end)
+	end
+	soundCache = {}
+
+	-- Очистить тему
+	Visual.themeCallbacks = {}
+
+	-- Сбросить kill tracking
+	Visual.resetKillCount()
+
+	Visual.Notify = function() end
+	Visual.PlaySound = function() end
 end
 
-Visual.ErrorSystem = {
-    errors = {},
-    maxErrors = 100,
-    enabled = true,
-    callbacks = {}
-}
+-- ── Initialize ──
+function Visual.init(CFG, allConnections)
+	allConnections = allConnections or {}
+	Visual._allConnections = allConnections
 
-function Visual.ErrorSystem:Log(context, err, severity)
-    if not self.enabled then return end
+	-- FOV circle
+	Visual.createFOVCircle()
 
-    severity = severity or "ERROR"
-    local entry = {
-        time = os.clock(),
-        context = tostring(context),
-        error = tostring(err),
-        severity = severity,
-        stack = debug.traceback("", 2)
-    }
+	-- Build UI tab
+	Visual.buildUITab(CFG, allConnections)
 
-    table.insert(self.errors, 1, entry)
+	-- Build Patch tab
+	Visual.buildPatchTab()
 
-    while #self.errors > self.maxErrors do
-        table.remove(self.errors)
-    end
+	-- Start update loop
+	Visual.startUpdateLoop()
 
-    for _, callback in ipairs(self.callbacks) do
-        pcall(callback, entry)
-    end
+	-- Show loading screen
+	Visual.showLoadingScreen()
 
-    local prefix = severity == "CRITICAL" and "[CRITICAL]" or "[ERROR]"
-    warn(string.format("%s %s: %s", prefix, context, err))
+	-- Initial notification
+	task.delay(2.5, function()
+		Visual.Notify("MOON", "v3.5 loaded successfully", 4)
+	end)
 end
-
-function Visual.ErrorSystem:OnError(callback)
-    if type(callback) == "function" then
-        table.insert(self.callbacks, callback)
-    end
-end
-
-function Visual.ErrorSystem:GetErrors(filter)
-    if not filter then return self.errors end
-
-    local filtered = {}
-    for _, errEntry in ipairs(self.errors) do
-        if errEntry.severity == filter or errEntry.context:find(filter) then
-            table.insert(filtered, errEntry)
-        end
-    end
-    return filtered
-end
-
-function Visual.ErrorSystem:Clear()
-    self.errors = {}
-end
-
-Visual.Performance = {
-    metrics = {},
-    history = {},
-    maxHistory = 60,
-    enabled = true
-}
-
-function Visual.Performance:Start(name)
-    if not self.enabled then return end
-    self.metrics[name] = {start = os.clock(), calls = (self.metrics[name] and self.metrics[name].calls or 0) + 1}
-end
-
-function Visual.Performance:Stop(name)
-    if not self.enabled or not self.metrics[name] then return end
-
-    local metric = self.metrics[name]
-    local duration = os.clock() - metric.start
-
-    if not self.history[name] then
-        self.history[name] = {samples = {}, total = 0, count = 0, max = 0, min = math.huge}
-    end
-
-    local hist = self.history[name]
-    table.insert(hist.samples, duration)
-    hist.total = hist.total + duration
-    hist.count = hist.count + 1
-    hist.max = math.max(hist.max, duration)
-    hist.min = math.min(hist.min, duration)
-
-    while #hist.samples > self.maxHistory do
-        local removed = table.remove(hist.samples, 1)
-        hist.total = hist.total - removed
-        hist.count = hist.count - 1
-    end
-end
-
-function Visual.Performance:GetStats(name)
-    local hist = self.history[name]
-    if not hist or hist.count == 0 then return nil end
-
-    return {
-        average = hist.total / hist.count,
-        max = hist.max,
-        min = hist.min,
-        calls = self.metrics[name] and self.metrics[name].calls or 0,
-        samples = hist.count
-    }
-end
-
-function Visual.Performance:GetReport()
-    local report = {}
-    for name, _ in pairs(self.history) do
-        report[name] = self:GetStats(name)
-    end
-    return report
-end
-
-function Visual.Performance:Reset()
-    self.metrics = {}
-    self.history = {}
-end
-
-Visual.Memory = {
-    tracked = {},
-    cleanupQueue = {},
-    autoCleanup = true,
-    cleanupInterval = 30
-}
-
-function Visual.Memory:Track(object, name, metadata)
-    if not object then return end
-
-    local id = tostring(object)
-    self.tracked[id] = {
-        object = object,
-        name = name or "Unknown",
-        created = os.clock(),
-        metadata = metadata or {}
-    }
-end
-
-function Visual.Memory:Untrack(object)
-    if not object then return end
-    local id = tostring(object)
-    self.tracked[id] = nil
-end
-
-function Visual.Memory:QueueCleanup(object, delayTime)
-    delayTime = delayTime or 0
-    table.insert(self.cleanupQueue, {
-        object = object,
-        time = os.clock() + delayTime
-    })
-end
-
-function Visual.Memory:ProcessCleanup()
-    local now = os.clock()
-    for i = #self.cleanupQueue, 1, -1 do
-        local item = self.cleanupQueue[i]
-        if now >= item.time then
-            pcall(function()
-                if item.object and item.object.Parent then
-                    item.object:Destroy()
-                end
-            end)
-            table.remove(self.cleanupQueue, i)
-        end
-    end
-end
-
-function Visual.Memory:GetStats()
-    local count = 0
-    local byType = {}
-
-    for _, entry in pairs(self.tracked) do
-        count = count + 1
-        local objType = typeof(entry.object)
-        byType[objType] = (byType[objType] or 0) + 1
-    end
-
-    return {
-        total = count,
-        byType = byType,
-        queuedCleanup = #self.cleanupQueue
-    }
-end
-
-function Visual.Memory:CleanupAll()
-    local cleaned = 0
-    for id, entry in pairs(self.tracked) do
-        pcall(function()
-            if entry.object and entry.object.Parent then
-                entry.object:Destroy()
-                cleaned = cleaned + 1
-            end
-        end)
-        self.tracked[id] = nil
-    end
-    return cleaned
-end
-
-Visual.Cache = {
-    stores = {},
-    defaultTTL = 1.0,
-    maxSize = 200
-}
-
-function Visual.Cache:CreateStore(name, ttl, maxSizeVal)
-    self.stores[name] = {
-        data = {},
-        ttl = ttl or self.defaultTTL,
-        maxSize = maxSizeVal or self.maxSize,
-        hits = 0,
-        misses = 0
-    }
-end
-
-function Visual.Cache:Get(storeName, key)
-    local store = self.stores[storeName]
-    if not store then return nil end
-
-    local entry = store.data[key]
-    if not entry then
-        store.misses = store.misses + 1
-        return nil
-    end
-
-    if os.clock() - entry.time > store.ttl then
-        store.data[key] = nil
-        store.misses = store.misses + 1
-        return nil
-    end
-
-    store.hits = store.hits + 1
-    entry.lastAccess = os.clock()
-    return entry.value
-end
-
-function Visual.Cache:Set(storeName, key, value)
-    local store = self.stores[storeName]
-    if not store then
-        self:CreateStore(storeName)
-        store = self.stores[storeName]
-    end
-
-    local count = 0
-    for _ in pairs(store.data) do count = count + 1 end
-
-    if count >= store.maxSize then
-        local oldestKey, oldestTime = nil, math.huge
-        for k, v in pairs(store.data) do
-            if v.lastAccess < oldestTime then
-                oldestTime = v.lastAccess
-                oldestKey = k
-            end
-        end
-        if oldestKey then
-            store.data[oldestKey] = nil
-        end
-    end
-
-    store.data[key] = {
-        value = value,
-        time = os.clock(),
-        lastAccess = os.clock()
-    }
-end
-
-function Visual.Cache:Clear(storeName)
-    if storeName then
-        if self.stores[storeName] then
-            self.stores[storeName].data = {}
-        end
-    else
-        for _, store in pairs(self.stores) do
-            store.data = {}
-        end
-    end
-end
-
-function Visual.Cache:GetCacheStats(storeName)
-    local store = self.stores[storeName]
-    if not store then return nil end
-
-    local count = 0
-    for _ in pairs(store.data) do count = count + 1 end
-
-    local hitRate = store.hits + store.misses > 0
-        and (store.hits / (store.hits + store.misses) * 100)
-        or 0
-
-    return {
-        entries = count,
-        hits = store.hits,
-        misses = store.misses,
-        hitRate = hitRate,
-        maxSize = store.maxSize
-    }
-end
-
-Visual.Cache:CreateStore("colors", 0.5, 100)
-Visual.Cache:CreateStore("positions", 0.1, 50)
-Visual.Cache:CreateStore("calculations", 1.0, 150)
-
-function Visual.SafePcall(context, func, ...)
-    Visual.Performance:Start(context)
-    local success, result = pcall(func, ...)
-    Visual.Performance:Stop(context)
-
-    if not success then
-        Visual.ErrorSystem:Log(context, result, "ERROR")
-    end
-
-    return success, result
-end
-
-function Visual.SafeTween(object, tweenInfo, properties, onComplete)
-    if not object or not object.Parent then
-        return nil
-    end
-
-    local tween = TweenService:Create(object, tweenInfo, properties)
-    Visual.Memory:Track(tween, "Tween")
-
-    tween.Completed:Connect(function()
-        Visual.Memory:Untrack(tween)
-        if onComplete then
-            pcall(onComplete)
-        end
-        tween:Destroy()
-    end)
-
-    tween:Play()
-    return tween
-end
-
-function Visual.SafeDestroy(object, delayTime)
-    if not object then return end
-
-    if delayTime and delayTime > 0 then
-        Visual.Memory:QueueCleanup(object, delayTime)
-    else
-        pcall(function()
-            if object.Parent then
-                object:Destroy()
-            end
-        end)
-    end
-end
-
-Visual.Validate = {}
-
-function Visual.Validate.Number(value, default, minVal, maxVal)
-    local num = tonumber(value)
-    if not num then return default end
-    if minVal and num < minVal then return minVal end
-    if maxVal and num > maxVal then return maxVal end
-    return num
-end
-
-function Visual.Validate.String(value, default, maxLength)
-    if type(value) ~= "string" then
-        return default or ""
-    end
-    if maxLength and #value > maxLength then
-        return value:sub(1, maxLength)
-    end
-    return value
-end
-
-function Visual.Validate.Color3Value(value, default)
-    if typeof(value) == "Color3" then
-        return value
-    end
-    return default or Color3.new(1, 1, 1)
-end
-
-function Visual.Validate.InstanceValue(value, className)
-    if typeof(value) ~= "Instance" then
-        return nil
-    end
-    if className and not value:IsA(className) then
-        return nil
-    end
-    return value
-end
-
-Visual.Maintenance = {
-    lastCleanup = 0,
-    cleanupInterval = 30,
-    enabled = true
-}
-
-function Visual.Maintenance:Run()
-    if not self.enabled then return end
-
-    local now = os.clock()
-    if now - self.lastCleanup < self.cleanupInterval then
-        return
-    end
-
-    self.lastCleanup = now
-
-    Visual.Memory:ProcessCleanup()
-
-    for storeName, store in pairs(Visual.Cache.stores) do
-        local toRemove = {}
-        for cacheKey, entry in pairs(store.data) do
-            if now - entry.time > store.ttl then
-                table.insert(toRemove, cacheKey)
-            end
-        end
-        for _, cacheKey in ipairs(toRemove) do
-            store.data[cacheKey] = nil
-        end
-    end
-
-    local storeCount = 0
-    for _ in pairs(Visual.Cache.stores) do storeCount = storeCount + 1 end
-
-    print(string.format("[MOON] Maintenance: Memory=%d, Cache=%d stores",
-        Visual.Memory:GetStats().total,
-        storeCount
-    ))
-end
-
-Visual.NotificationQueue = {
-    queue = {},
-    maxVisible = 5,
-    spacing = 8
-}
-
-function Visual.NotificationQueue:Add(title, text, duration, color, priority)
-    priority = priority or 0
-
-    local notification = {
-        title = Visual.Validate.String(title, "Notification", 50),
-        text = Visual.Validate.String(text, "", 200),
-        duration = Visual.Validate.Number(duration, 4, 1, 30),
-        color = Visual.Validate.Color3Value(color, Visual.getAuroraColor(os.clock())),
-        priority = priority,
-        time = os.clock()
-    }
-
-    local inserted = false
-    for i, notif in ipairs(self.queue) do
-        if notification.priority > notif.priority then
-            table.insert(self.queue, i, notification)
-            inserted = true
-            break
-        end
-    end
-
-    if not inserted then
-        table.insert(self.queue, notification)
-    end
-
-    while #self.queue > 20 do
-        table.remove(self.queue, 1)
-    end
-
-    self:Process()
-end
-
-function Visual.NotificationQueue:Process()
-    local visible = 0
-    for i, notif in ipairs(self.queue) do
-        if visible < self.maxVisible then
-            if not notif.shown then
-                Visual.Notify(notif.title, notif.text, notif.duration, notif.color)
-                notif.shown = true
-                visible = visible + 1
-            end
-        end
-    end
-
-    local now = os.clock()
-    for i = #self.queue, 1, -1 do
-        local notif = self.queue[i]
-        if notif.shown and now - notif.time > notif.duration + 1 then
-            table.remove(self.queue, i)
-        end
-    end
-end
-
-coroutine.wrap(function()
-    while true do
-        wait(5)
-        Visual.Maintenance:Run()
-    end
-end)()
-
-Visual.Memory:Track(Visual.screenGui, "MainScreenGui")
-
-print("[MOON v3.6] Enhanced systems loaded:")
-print("  > Error Handling System")
-print("  > Performance Monitor")
-print("  > Memory Management")
-print("  > Advanced Caching")
-print("  > Safe Operations")
-print("  > Input Validation")
-print("  > Auto Maintenance")
-print("  > Enhanced Notifications")
-print("Total: 380+ lines of improvements")
 
 return Visual
