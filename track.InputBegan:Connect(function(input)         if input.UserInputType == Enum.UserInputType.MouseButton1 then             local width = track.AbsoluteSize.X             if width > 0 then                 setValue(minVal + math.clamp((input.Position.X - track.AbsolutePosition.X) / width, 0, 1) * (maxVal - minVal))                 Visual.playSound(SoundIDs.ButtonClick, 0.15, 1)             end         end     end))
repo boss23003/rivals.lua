@@ -1,4 +1,3 @@
---[[
     MOON v3.5 — VISUAL MODULE (UNIFIED)
     Aurora/Moon gradient system, animated binds, rage overlay,
     moon crescent, chams, UI sounds, full architecture
@@ -9,7 +8,7 @@ local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
 local SoundService = game:GetService("SoundService")
-local LocalPlayer = Players.LттocalPlayer
+local LocalPlayer = Players.LocalPlayer
 local BASE_W = 1920
 local BASE_H = 1080
 local auroraColors = {
@@ -260,11 +259,6 @@ ntStroke.Parent = titleLabel
     local titleGrad = Instance.new("UIGradient")
     titleGrad.Color = Visual.getAuroraSequence(os.clock())
     titleGrad.Parent = titleLabel
-    local ntStroke = Instance.new("UIStroke")
-    ntStroke.Thickness = 1.2
-    ntStroke.Color = Color3.new(0, 0, 0)
-    ntStroke.Transparency = 0.15
-    ntStroke.Parent = titleLabel
     local descLabel = Instance.new("TextLabel")
     descLabel.Size = UDim2.new(1, -16, 0, 14)
     descLabel.Position = UDim2.new(0, 12, 0, 29)
@@ -347,7 +341,7 @@ local watermarkTitle = Instance.new("TextLabel")
 watermarkTitle.Size = UDim2.new(0, 100, 1, 0)
 watermarkTitle.Position = UDim2.new(0, 10, 0, 0)
 watermarkTitle.BackgroundTransparency = 1
-watermarkTitle.Text = "MOON v3.5"
+watermarkTitle.Text = "MOON v3.6"
 watermarkTitle.TextColor3 = Color3.new(1, 1, 1)
 watermarkTitle.TextSize = 11
 watermarkTitle.Font = Enum.Font.GothamBold
@@ -2237,6 +2231,7 @@ function Visual.updateAnimations(dt, globalT)
             0, 90 + math.floor(math.cos(globalT) * 2)
         )
     end)
+end
 function Visual.destroy()
     Visual.removeAllChams()
     pcall(function() blurMain:Destroy() end)
@@ -2247,13 +2242,6 @@ function Visual.destroy()
     end
     soundCache = {}
 end
-
---[[
-    ╔═══════════════════════════════════════════════════════════════╗
-    ║     MOON v3.6 - PROFESSIONAL ENHANCEMENTS MODULE              ║
-    ║     Add this to your visual.txt for 200+ lines of improvements║
-    ╚═══════════════════════════════════════════════════════════════╝
-    
     USAGE: Insert this code at the END of visual.txt before return Visual
 ]]
 
@@ -2808,5 +2796,4 @@ print("  ✓ Enhanced Notifications")
 print("Total: 380+ lines of improvements")
 
 -- Export enhanced Visual module
-return Visual
 return Visual
