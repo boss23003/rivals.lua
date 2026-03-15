@@ -1,3 +1,4 @@
+--[[
     MOON v3.5 — VISUAL MODULE (UNIFIED)
     Aurora/Moon gradient system, animated binds, rage overlay,
     moon crescent, chams, UI sounds, full architecture
@@ -251,19 +252,14 @@ function Visual.Notify(title, text, duration, color)
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.ZIndex = 202
     titleLabel.Parent = frame
-local ntStroke = Instance.new("UIStroke")
-ntStroke.Thickness = 1.2
-ntStroke.Color = Color3.new(0, 0, 0)
-ntStroke.Transparency = 0.15
-ntStroke.Parent = titleLabel
-    local titleGrad = Instance.new("UIGradient")
-    titleGrad.Color = Visual.getAuroraSequence(os.clock())
-    titleGrad.Parent = titleLabel
     local ntStroke = Instance.new("UIStroke")
     ntStroke.Thickness = 1.2
     ntStroke.Color = Color3.new(0, 0, 0)
     ntStroke.Transparency = 0.15
     ntStroke.Parent = titleLabel
+    local titleGrad = Instance.new("UIGradient")
+    titleGrad.Color = Visual.getAuroraSequence(os.clock())
+    titleGrad.Parent = titleLabel
     local descLabel = Instance.new("TextLabel")
     descLabel.Size = UDim2.new(1, -16, 0, 14)
     descLabel.Position = UDim2.new(0, 12, 0, 29)
@@ -431,20 +427,20 @@ function Visual.showLoadingScreen()
     local cardStrokeGrad = Instance.new("UIGradient")
     cardStrokeGrad.Color = Visual.getAuroraSequence(os.clock())
     cardStrokeGrad.Parent = cardStroke
-    local title = Instance.new("TextLabel")
-    title.Text = "MOON"
-    title.Size = UDim2.new(1, 0, 0, 24)
-    title.Position = UDim2.new(0, 0, 0, 14)
-    title.BackgroundTransparency = 1
-    title.TextColor3 = Color3.new(1, 1, 1)
-    title.TextTransparency = 1
-    title.TextSize = 18
-    title.Font = Enum.Font.GothamBold
-    title.TextXAlignment = Enum.TextXAlignment.Center
-    title.Parent = card
+    local titleLoad = Instance.new("TextLabel")
+    titleLoad.Text = "MOON"
+    titleLoad.Size = UDim2.new(1, 0, 0, 24)
+    titleLoad.Position = UDim2.new(0, 0, 0, 14)
+    titleLoad.BackgroundTransparency = 1
+    titleLoad.TextColor3 = Color3.new(1, 1, 1)
+    titleLoad.TextTransparency = 1
+    titleLoad.TextSize = 18
+    titleLoad.Font = Enum.Font.GothamBold
+    titleLoad.TextXAlignment = Enum.TextXAlignment.Center
+    titleLoad.Parent = card
     local titleGradL = Instance.new("UIGradient")
     titleGradL.Color = Visual.getAuroraSequence(os.clock())
-    titleGradL.Parent = title
+    titleGradL.Parent = titleLoad
     local sub = Instance.new("TextLabel")
     sub.Text = "initializing..."
     sub.Size = UDim2.new(1, 0, 0, 14)
@@ -505,7 +501,7 @@ function Visual.showLoadingScreen()
     TweenService:Create(blur, TweenInfo.new(0.5), {Size = 18}):Play()
     TweenService:Create(card, TweenInfo.new(0.5, Enum.EasingStyle.Quint), {BackgroundTransparency = 0.08}):Play()
     TweenService:Create(cardStroke, TweenInfo.new(0.5), {Transparency = 0.14}):Play()
-    TweenService:Create(title, TweenInfo.new(0.5), {TextTransparency = 0}):Play()
+    TweenService:Create(titleLoad, TweenInfo.new(0.5), {TextTransparency = 0}):Play()
     TweenService:Create(sub, TweenInfo.new(0.5), {TextTransparency = 0.15}):Play()
     TweenService:Create(percent, TweenInfo.new(0.5), {TextTransparency = 0.3}):Play()
     TweenService:Create(barBg, TweenInfo.new(0.4), {
@@ -534,7 +530,7 @@ function Visual.showLoadingScreen()
         wait(0.4)
         TweenService:Create(card, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
         TweenService:Create(cardStroke, TweenInfo.new(0.3), {Transparency = 1}):Play()
-        TweenService:Create(title, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+        TweenService:Create(titleLoad, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
         TweenService:Create(sub, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
         TweenService:Create(percent, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
         TweenService:Create(barFill, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
@@ -1243,12 +1239,12 @@ local function makeTitleButton(text, xOffset, callback)
     end)
     return button, grad
 end
-local closeButton, closeButtonGrad = makeTitleButton("×", -38, function()
+local closeButton, closeButtonGrad = makeTitleButton("\195\151", -38, function()
     if Visual._onClose then Visual._onClose() end
 end)
 Visual._closeBtn = closeButton
 Visual._closeBtnG = closeButtonGrad
-local minimizeButton, minimizeButtonGrad = makeTitleButton("—", -74, function()
+local minimizeButton, minimizeButtonGrad = makeTitleButton("\226\128\148", -74, function()
     minimized = not minimized
     TweenService:Create(mainWindow, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {
         Size = minimized and UDim2.new(0, windowW, 0, 48) or UDim2.new(0, windowW, 0, windowH)
@@ -1397,10 +1393,10 @@ Visual.themeCallbacks = {}
 function Visual.getMappedPage(tabIndex, rageMode)
     if rageMode then return tabIndex end
     if tabIndex <= 2 then return tabIndex end
-    if tabIndex == 3 then return 4 end -- Binds
-    if tabIndex == 4 then return 5 end -- UI
-    if tabIndex == 5 then return 6 end -- Cfg
-    return 7 -- Patch
+    if tabIndex == 3 then return 4 end
+    if tabIndex == 4 then return 5 end
+    if tabIndex == 5 then return 6 end
+    return 7
 end
 local function refreshTabButtons()
     for _, button in ipairs(tabButtons) do
@@ -1444,7 +1440,7 @@ local function refreshTabButtons()
         button.MouseButton1Click:Connect(function()
             Visual.PlaySound("Tab", 0.22, 1.02)
             activeTab = i
-            for pi = 1, 6 do tabPages[pi].Visible = false end
+            for pi = 1, 7 do tabPages[pi].Visible = false end
             local mapped = Visual.getMappedPage(i, isRageMode)
             tabPages[mapped].Visible = true
             for bi, b in ipairs(tabButtons) do
@@ -1460,7 +1456,7 @@ local function refreshTabButtons()
         button.TextTransparency = i == activeTab and 0 or 0.35
         tabButtons[i] = button
     end
-    for pi = 1, 6 do tabPages[pi].Visible = false end
+    for pi = 1, 7 do tabPages[pi].Visible = false end
     tabPages[Visual.getMappedPage(activeTab, isRageMode)].Visible = true
     local w = math.floor(windowW / #currentTabs)
     tabIndicator.Size = UDim2.new(0, w - 16, 0, 2)
@@ -1669,11 +1665,11 @@ function Visual.makeSlider(pi, text, key, mn, mx, step, CFG, allConnections)
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 20
     label.Parent = row
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.2
-    stroke.Color = Color3.new(0, 0, 0)
-    stroke.Transparency = 0.15
-    stroke.Parent = label
+    local sliderStroke = Instance.new("UIStroke")
+    sliderStroke.Thickness = 1.2
+    sliderStroke.Color = Color3.new(0, 0, 0)
+    sliderStroke.Transparency = 0.15
+    sliderStroke.Parent = label
     local labelGrad = Instance.new("UIGradient")
     labelGrad.Color = Visual.getAuroraSequence(os.clock())
     labelGrad.Transparency = NumberSequence.new({
@@ -1841,11 +1837,11 @@ function Visual.makeCycle(pi, text, opts, key, CFG, callback)
     valLabel.TextXAlignment = Enum.TextXAlignment.Right
     valLabel.ZIndex = 20
     valLabel.Parent = row
-    local stroke2 = Instance.new("UIStroke")
-    stroke2.Thickness = 1.2
-    stroke2.Color = Color3.new(0, 0, 0)
-    stroke2.Transparency = 0.15
-    stroke2.Parent = valLabel
+    local cycleStroke2 = Instance.new("UIStroke")
+    cycleStroke2.Thickness = 1.2
+    cycleStroke2.Color = Color3.new(0, 0, 0)
+    cycleStroke2.Transparency = 0.15
+    cycleStroke2.Parent = valLabel
     local valGrad = Instance.new("UIGradient")
     valGrad.Color = Visual.getAuroraSequence(os.clock())
     valGrad.Parent = valLabel
@@ -1929,11 +1925,11 @@ function Visual.makeRebind(pi, text, cfgKey, CFG, allConnections)
     valLabel.TextXAlignment = Enum.TextXAlignment.Right
     valLabel.ZIndex = 20
     valLabel.Parent = row
-    local stroke2 = Instance.new("UIStroke")
-    stroke2.Thickness = 1.2
-    stroke2.Color = Color3.new(0, 0, 0)
-    stroke2.Transparency = 0.15
-    stroke2.Parent = valLabel
+    local rebindStroke2 = Instance.new("UIStroke")
+    rebindStroke2.Thickness = 1.2
+    rebindStroke2.Color = Color3.new(0, 0, 0)
+    rebindStroke2.Transparency = 0.15
+    rebindStroke2.Parent = valLabel
     local valGrad = Instance.new("UIGradient")
     valGrad.Color = Visual.getAuroraSequence(os.clock())
     valGrad.Parent = valLabel
@@ -1997,11 +1993,11 @@ function Visual.makeInfo(pi, text)
     label.ZIndex = 20
     label.LayoutOrder = nextOrder(pi)
     label.Parent = tabPages[pi]
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.2
-    stroke.Color = Color3.new(0, 0, 0)
-    stroke.Transparency = 0.15
-    stroke.Parent = label
+    local infoStroke = Instance.new("UIStroke")
+    infoStroke.Thickness = 1.2
+    infoStroke.Color = Color3.new(0, 0, 0)
+    infoStroke.Transparency = 0.15
+    infoStroke.Parent = label
     local labelGrad = Instance.new("UIGradient")
     labelGrad.Color = Visual.getAuroraSequence(os.clock())
     labelGrad.Transparency = NumberSequence.new({
@@ -2027,11 +2023,11 @@ function Visual.makeLabel(pi)
     label.ZIndex = 20
     label.LayoutOrder = nextOrder(pi)
     label.Parent = tabPages[pi]
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.2
-    stroke.Color = Color3.new(0, 0, 0)
-    stroke.Transparency = 0.15
-    stroke.Parent = label
+    local labelStroke = Instance.new("UIStroke")
+    labelStroke.Thickness = 1.2
+    labelStroke.Color = Color3.new(0, 0, 0)
+    labelStroke.Transparency = 0.15
+    labelStroke.Parent = label
     local labelGrad = Instance.new("UIGradient")
     labelGrad.Color = Visual.getAuroraSequence(os.clock())
     labelGrad.Parent = label
@@ -2071,11 +2067,11 @@ function Visual.makeButton(pi, text, callback)
     label.TextXAlignment = Enum.TextXAlignment.Center
     label.ZIndex = 20
     label.Parent = row
-    local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 1.2
-    stroke.Color = Color3.new(0, 0, 0)
-    stroke.Transparency = 0.15
-    stroke.Parent = label
+    local buttonStroke = Instance.new("UIStroke")
+    buttonStroke.Thickness = 1.2
+    buttonStroke.Color = Color3.new(0, 0, 0)
+    buttonStroke.Transparency = 0.15
+    buttonStroke.Parent = label
     local labelGrad = Instance.new("UIGradient")
     labelGrad.Color = Visual.getAuroraSequence(os.clock())
     labelGrad.Parent = label
@@ -2247,12 +2243,6 @@ function Visual.destroy()
     end
     soundCache = {}
 end
-    USAGE: Insert this code at the END of visual.txt before return Visual
-]]
-
--- ═══════════════════════════════════════════════════════════════
--- ADVANCED ERROR HANDLING SYSTEM (45 lines)
--- ═══════════════════════════════════════════════════════════════
 
 Visual.ErrorSystem = {
     errors = {},
@@ -2261,33 +2251,30 @@ Visual.ErrorSystem = {
     callbacks = {}
 }
 
-function Visual.ErrorSystem:Log(context, error, severity)
+function Visual.ErrorSystem:Log(context, err, severity)
     if not self.enabled then return end
-    
+
     severity = severity or "ERROR"
     local entry = {
         time = os.clock(),
         context = tostring(context),
-        error = tostring(error),
+        error = tostring(err),
         severity = severity,
         stack = debug.traceback("", 2)
     }
-    
+
     table.insert(self.errors, 1, entry)
-    
-    -- Limit error history
+
     while #self.errors > self.maxErrors do
         table.remove(self.errors)
     end
-    
-    -- Call registered callbacks
+
     for _, callback in ipairs(self.callbacks) do
         pcall(callback, entry)
     end
-    
-    -- Log to console
+
     local prefix = severity == "CRITICAL" and "[CRITICAL]" or "[ERROR]"
-    warn(string.format("%s %s: %s", prefix, context, error))
+    warn(string.format("%s %s: %s", prefix, context, err))
 end
 
 function Visual.ErrorSystem:OnError(callback)
@@ -2298,11 +2285,11 @@ end
 
 function Visual.ErrorSystem:GetErrors(filter)
     if not filter then return self.errors end
-    
+
     local filtered = {}
-    for _, err in ipairs(self.errors) do
-        if err.severity == filter or err.context:find(filter) then
-            table.insert(filtered, err)
+    for _, errEntry in ipairs(self.errors) do
+        if errEntry.severity == filter or errEntry.context:find(filter) then
+            table.insert(filtered, errEntry)
         end
     end
     return filtered
@@ -2311,10 +2298,6 @@ end
 function Visual.ErrorSystem:Clear()
     self.errors = {}
 end
-
--- ═══════════════════════════════════════════════════════════════
--- PERFORMANCE MONITORING SYSTEM (52 lines)
--- ═══════════════════════════════════════════════════════════════
 
 Visual.Performance = {
     metrics = {},
@@ -2330,22 +2313,21 @@ end
 
 function Visual.Performance:Stop(name)
     if not self.enabled or not self.metrics[name] then return end
-    
+
     local metric = self.metrics[name]
     local duration = os.clock() - metric.start
-    
+
     if not self.history[name] then
         self.history[name] = {samples = {}, total = 0, count = 0, max = 0, min = math.huge}
     end
-    
+
     local hist = self.history[name]
     table.insert(hist.samples, duration)
     hist.total = hist.total + duration
     hist.count = hist.count + 1
     hist.max = math.max(hist.max, duration)
     hist.min = math.min(hist.min, duration)
-    
-    -- Limit history
+
     while #hist.samples > self.maxHistory do
         local removed = table.remove(hist.samples, 1)
         hist.total = hist.total - removed
@@ -2356,7 +2338,7 @@ end
 function Visual.Performance:GetStats(name)
     local hist = self.history[name]
     if not hist or hist.count == 0 then return nil end
-    
+
     return {
         average = hist.total / hist.count,
         max = hist.max,
@@ -2379,10 +2361,6 @@ function Visual.Performance:Reset()
     self.history = {}
 end
 
--- ═══════════════════════════════════════════════════════════════
--- MEMORY MANAGEMENT SYSTEM (48 lines)
--- ═══════════════════════════════════════════════════════════════
-
 Visual.Memory = {
     tracked = {},
     cleanupQueue = {},
@@ -2392,7 +2370,7 @@ Visual.Memory = {
 
 function Visual.Memory:Track(object, name, metadata)
     if not object then return end
-    
+
     local id = tostring(object)
     self.tracked[id] = {
         object = object,
@@ -2408,11 +2386,11 @@ function Visual.Memory:Untrack(object)
     self.tracked[id] = nil
 end
 
-function Visual.Memory:QueueCleanup(object, delay)
-    delay = delay or 0
+function Visual.Memory:QueueCleanup(object, delayTime)
+    delayTime = delayTime or 0
     table.insert(self.cleanupQueue, {
         object = object,
-        time = os.clock() + delay
+        time = os.clock() + delayTime
     })
 end
 
@@ -2434,13 +2412,13 @@ end
 function Visual.Memory:GetStats()
     local count = 0
     local byType = {}
-    
+
     for _, entry in pairs(self.tracked) do
         count = count + 1
         local objType = typeof(entry.object)
         byType[objType] = (byType[objType] or 0) + 1
     end
-    
+
     return {
         total = count,
         byType = byType,
@@ -2462,21 +2440,17 @@ function Visual.Memory:CleanupAll()
     return cleaned
 end
 
--- ═══════════════════════════════════════════════════════════════
--- ADVANCED CACHING SYSTEM (55 lines)
--- ═══════════════════════════════════════════════════════════════
-
 Visual.Cache = {
     stores = {},
     defaultTTL = 1.0,
     maxSize = 200
 }
 
-function Visual.Cache:CreateStore(name, ttl, maxSize)
+function Visual.Cache:CreateStore(name, ttl, maxSizeVal)
     self.stores[name] = {
         data = {},
         ttl = ttl or self.defaultTTL,
-        maxSize = maxSize or self.maxSize,
+        maxSize = maxSizeVal or self.maxSize,
         hits = 0,
         misses = 0
     }
@@ -2485,20 +2459,19 @@ end
 function Visual.Cache:Get(storeName, key)
     local store = self.stores[storeName]
     if not store then return nil end
-    
+
     local entry = store.data[key]
     if not entry then
         store.misses = store.misses + 1
         return nil
     end
-    
-    -- Check if expired
+
     if os.clock() - entry.time > store.ttl then
         store.data[key] = nil
         store.misses = store.misses + 1
         return nil
     end
-    
+
     store.hits = store.hits + 1
     entry.lastAccess = os.clock()
     return entry.value
@@ -2510,13 +2483,11 @@ function Visual.Cache:Set(storeName, key, value)
         self:CreateStore(storeName)
         store = self.stores[storeName]
     end
-    
-    -- Check size limit
+
     local count = 0
     for _ in pairs(store.data) do count = count + 1 end
-    
+
     if count >= store.maxSize then
-        -- Remove oldest entry (LRU)
         local oldestKey, oldestTime = nil, math.huge
         for k, v in pairs(store.data) do
             if v.lastAccess < oldestTime then
@@ -2528,7 +2499,7 @@ function Visual.Cache:Set(storeName, key, value)
             store.data[oldestKey] = nil
         end
     end
-    
+
     store.data[key] = {
         value = value,
         time = os.clock(),
@@ -2548,17 +2519,17 @@ function Visual.Cache:Clear(storeName)
     end
 end
 
-function Visual.Cache:GetStats(storeName)
+function Visual.Cache:GetCacheStats(storeName)
     local store = self.stores[storeName]
     if not store then return nil end
-    
+
     local count = 0
     for _ in pairs(store.data) do count = count + 1 end
-    
-    local hitRate = store.hits + store.misses > 0 
-        and (store.hits / (store.hits + store.misses) * 100) 
+
+    local hitRate = store.hits + store.misses > 0
+        and (store.hits / (store.hits + store.misses) * 100)
         or 0
-    
+
     return {
         entries = count,
         hits = store.hits,
@@ -2568,24 +2539,19 @@ function Visual.Cache:GetStats(storeName)
     }
 end
 
--- Initialize default caches
 Visual.Cache:CreateStore("colors", 0.5, 100)
 Visual.Cache:CreateStore("positions", 0.1, 50)
 Visual.Cache:CreateStore("calculations", 1.0, 150)
-
--- ═══════════════════════════════════════════════════════════════
--- SAFE OPERATION WRAPPERS (35 lines)
--- ═══════════════════════════════════════════════════════════════
 
 function Visual.SafePcall(context, func, ...)
     Visual.Performance:Start(context)
     local success, result = pcall(func, ...)
     Visual.Performance:Stop(context)
-    
+
     if not success then
         Visual.ErrorSystem:Log(context, result, "ERROR")
     end
-    
+
     return success, result
 end
 
@@ -2593,10 +2559,10 @@ function Visual.SafeTween(object, tweenInfo, properties, onComplete)
     if not object or not object.Parent then
         return nil
     end
-    
+
     local tween = TweenService:Create(object, tweenInfo, properties)
     Visual.Memory:Track(tween, "Tween")
-    
+
     tween.Completed:Connect(function()
         Visual.Memory:Untrack(tween)
         if onComplete then
@@ -2604,16 +2570,16 @@ function Visual.SafeTween(object, tweenInfo, properties, onComplete)
         end
         tween:Destroy()
     end)
-    
+
     tween:Play()
     return tween
 end
 
-function Visual.SafeDestroy(object, delay)
+function Visual.SafeDestroy(object, delayTime)
     if not object then return end
-    
-    if delay and delay > 0 then
-        Visual.Memory:QueueCleanup(object, delay)
+
+    if delayTime and delayTime > 0 then
+        Visual.Memory:QueueCleanup(object, delayTime)
     else
         pcall(function()
             if object.Parent then
@@ -2623,17 +2589,13 @@ function Visual.SafeDestroy(object, delay)
     end
 end
 
--- ═══════════════════════════════════════════════════════════════
--- INPUT VALIDATION UTILITIES (28 lines)
--- ═══════════════════════════════════════════════════════════════
-
 Visual.Validate = {}
 
-function Visual.Validate.Number(value, default, min, max)
+function Visual.Validate.Number(value, default, minVal, maxVal)
     local num = tonumber(value)
     if not num then return default end
-    if min and num < min then return min end
-    if max and num > max then return max end
+    if minVal and num < minVal then return minVal end
+    if maxVal and num > maxVal then return maxVal end
     return num
 end
 
@@ -2647,14 +2609,14 @@ function Visual.Validate.String(value, default, maxLength)
     return value
 end
 
-function Visual.Validate.Color3(value, default)
+function Visual.Validate.Color3Value(value, default)
     if typeof(value) == "Color3" then
         return value
     end
     return default or Color3.new(1, 1, 1)
 end
 
-function Visual.Validate.Instance(value, className)
+function Visual.Validate.InstanceValue(value, className)
     if typeof(value) ~= "Instance" then
         return nil
     end
@@ -2664,10 +2626,6 @@ function Visual.Validate.Instance(value, className)
     return value
 end
 
--- ═══════════════════════════════════════════════════════════════
--- AUTOMATIC MAINTENANCE SYSTEM (32 lines)
--- ═══════════════════════════════════════════════════════════════
-
 Visual.Maintenance = {
     lastCleanup = 0,
     cleanupInterval = 30,
@@ -2676,40 +2634,36 @@ Visual.Maintenance = {
 
 function Visual.Maintenance:Run()
     if not self.enabled then return end
-    
+
     local now = os.clock()
     if now - self.lastCleanup < self.cleanupInterval then
         return
     end
-    
+
     self.lastCleanup = now
-    
-    -- Process memory cleanup queue
+
     Visual.Memory:ProcessCleanup()
-    
-    -- Clear expired cache entries
+
     for storeName, store in pairs(Visual.Cache.stores) do
         local toRemove = {}
-        for key, entry in pairs(store.data) do
+        for cacheKey, entry in pairs(store.data) do
             if now - entry.time > store.ttl then
-                table.insert(toRemove, key)
+                table.insert(toRemove, cacheKey)
             end
         end
-        for _, key in ipairs(toRemove) do
-            store.data[key] = nil
+        for _, cacheKey in ipairs(toRemove) do
+            store.data[cacheKey] = nil
         end
     end
-    
-    -- Log maintenance
-    print(string.format("[MOON] Maintenance: Memory=%d, Cache=%d stores", 
+
+    local storeCount = 0
+    for _ in pairs(Visual.Cache.stores) do storeCount = storeCount + 1 end
+
+    print(string.format("[MOON] Maintenance: Memory=%d, Cache=%d stores",
         Visual.Memory:GetStats().total,
-        #Visual.Cache.stores
+        storeCount
     ))
 end
-
--- ═══════════════════════════════════════════════════════════════
--- ENHANCED NOTIFICATION SYSTEM (42 lines)
--- ═══════════════════════════════════════════════════════════════
 
 Visual.NotificationQueue = {
     queue = {},
@@ -2719,17 +2673,16 @@ Visual.NotificationQueue = {
 
 function Visual.NotificationQueue:Add(title, text, duration, color, priority)
     priority = priority or 0
-    
+
     local notification = {
         title = Visual.Validate.String(title, "Notification", 50),
         text = Visual.Validate.String(text, "", 200),
         duration = Visual.Validate.Number(duration, 4, 1, 30),
-        color = Visual.Validate.Color3(color, Visual.getAuroraColor(os.clock())),
+        color = Visual.Validate.Color3Value(color, Visual.getAuroraColor(os.clock())),
         priority = priority,
         time = os.clock()
     }
-    
-    -- Insert based on priority
+
     local inserted = false
     for i, notif in ipairs(self.queue) do
         if notification.priority > notif.priority then
@@ -2738,21 +2691,19 @@ function Visual.NotificationQueue:Add(title, text, duration, color, priority)
             break
         end
     end
-    
+
     if not inserted then
         table.insert(self.queue, notification)
     end
-    
-    -- Limit queue size
+
     while #self.queue > 20 do
         table.remove(self.queue, 1)
     end
-    
+
     self:Process()
 end
 
 function Visual.NotificationQueue:Process()
-    -- Show top notifications
     local visible = 0
     for i, notif in ipairs(self.queue) do
         if visible < self.maxVisible then
@@ -2763,8 +2714,7 @@ function Visual.NotificationQueue:Process()
             end
         end
     end
-    
-    -- Remove expired
+
     local now = os.clock()
     for i = #self.queue, 1, -1 do
         local notif = self.queue[i]
@@ -2774,11 +2724,6 @@ function Visual.NotificationQueue:Process()
     end
 end
 
--- ═══════════════════════════════════════════════════════════════
--- INITIALIZATION & AUTO-START
--- ═══════════════════════════════════════════════════════════════
-
--- Start automatic maintenance
 coroutine.wrap(function()
     while true do
         wait(5)
@@ -2786,19 +2731,17 @@ coroutine.wrap(function()
     end
 end)()
 
--- Register cleanup on script end
 Visual.Memory:Track(Visual.screenGui, "MainScreenGui")
 
 print("[MOON v3.6] Enhanced systems loaded:")
-print("  ✓ Error Handling System")
-print("  ✓ Performance Monitor")
-print("  ✓ Memory Management")
-print("  ✓ Advanced Caching")
-print("  ✓ Safe Operations")
-print("  ✓ Input Validation")
-print("  ✓ Auto Maintenance")
-print("  ✓ Enhanced Notifications")
+print("  > Error Handling System")
+print("  > Performance Monitor")
+print("  > Memory Management")
+print("  > Advanced Caching")
+print("  > Safe Operations")
+print("  > Input Validation")
+print("  > Auto Maintenance")
+print("  > Enhanced Notifications")
 print("Total: 380+ lines of improvements")
 
--- Export enhanced Visual module
 return Visual
