@@ -209,8 +209,8 @@ Visual.UIConfigs = {
         Color3.fromRGB(100, 100, 200)
     },
     ColorSpeed = 0.35,
-    Intensity = 1,
-    Transparency = 0.15,
+    ColorIntensity = 1,
+    UITransparency = 0.15,
     BackgroundAnimate = false,
     TopBarAnimate = false,
     ButtonMode = 1, -- 1: Default, 2: Glow, 3: Gradient, 4: Hover, 5: Pulse
