@@ -2200,7 +2200,6 @@ function Visual.closeMenu(CFG)
         if savedMouseIconEnabled ~= nil then UserInputService.MouseIconEnabled = savedMouseIconEnabled end
     end)
 end
-    end
 function Visual.handleDrag(inputPos)
     if Visual._dragState.drag and Visual._dragState.start and Visual._dragState.pos then
         local delta = inputPos - Visual._dragState.start
