@@ -1,6 +1,6 @@
 --[[
-    LUNA v3.2 — VISUAL MODULE (UNIFIED)
-    Aurora gradient system, animated binds, rage overlay,
+    MOON v3.5 — VISUAL MODULE (UNIFIED)
+    Aurora/Moon gradient system, animated binds, rage overlay,
     moon crescent, chams, UI sounds, full architecture
 ]]
 
@@ -200,8 +200,58 @@ function Visual.Ripple(button, x, y)
 end
 
 -- =============================================
---          NOTIFICATION SYSTEM
+--          COLOR ENGINE & CONFIG
 -- =============================================
+Visual.UIConfigs = {
+    ThemeMode = 1, -- 1: Aurora, 2: Moon, 3: Classic, 4: Custom
+    CustomColors = {
+        Color3.fromRGB(200, 200, 255),
+        Color3.fromRGB(100, 100, 200)
+    },
+    ColorSpeed = 0.35,
+    Intensity = 1,
+    Transparency = 0.15,
+    BackgroundAnimate = false,
+    TopBarAnimate = false,
+    ButtonMode = 1, -- 1: Default, 2: Glow, 3: Gradient, 4: Hover, 5: Pulse
+    StrokeColor = Color3.new(0,0,0),
+    StrokeTransparency = 0.15
+}
+
+function Visual.getColor(t, offset)
+    local cfg = Visual.UIConfigs
+    if cfg.ThemeMode == 1 then -- Aurora
+        return Visual.getAuroraColor(t, offset)
+    elseif cfg.ThemeMode == 2 then -- Moon
+        return Color3.fromRGB(255, 255, 255):Lerp(Color3.fromRGB(180, 190, 255), math.sin(t * cfg.ColorSpeed + offset) * 0.5 + 0.5)
+    elseif cfg.ThemeMode == 3 then -- Classic (Static Moon)
+        return Color3.fromRGB(220, 225, 255)
+    elseif cfg.ThemeMode == 4 then -- Custom
+        local colors = cfg.CustomColors
+        local count = #colors
+        if count == 0 then return Color3.new(1,1,1) end
+        if count == 1 then return colors[1] end
+        local idx = ((t * cfg.ColorSpeed + offset) % count)
+        local i1 = math.floor(idx) % count + 1
+        local i2 = (i1 % count) + 1
+        local frac = idx - math.floor(idx)
+        return colors[i1]:Lerp(colors[i2], frac)
+    end
+    return Color3.new(1,1,1)
+end
+
+function Visual.getSequence(t)
+    return ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Visual.getColor(t, 0)),
+        ColorSequenceKeypoint.new(0.5, Visual.getColor(t, 2)),
+        ColorSequenceKeypoint.new(1, Visual.getColor(t, 4))
+    })
+end
+
+Visual.ColorEngine = {
+    GetColor = Visual.getColor,
+    GetSequence = Visual.getSequence
+}
 local notifyList = Instance.new("Frame")
 notifyList.Size = UDim2.new(0, 330, 1, -40)
 notifyList.Position = UDim2.new(1, -350, 0, 20)
@@ -365,7 +415,7 @@ local watermarkTitle = Instance.new("TextLabel")
 watermarkTitle.Size = UDim2.new(0, 100, 1, 0)
 watermarkTitle.Position = UDim2.new(0, 10, 0, 0)
 watermarkTitle.BackgroundTransparency = 1
-watermarkTitle.Text = "LUNA v3.2"
+watermarkTitle.Text = "MOON v3.5"
 watermarkTitle.TextColor3 = Color3.new(1, 1, 1)
 watermarkTitle.TextSize = 11
 watermarkTitle.Font = Enum.Font.GothamBold
@@ -461,7 +511,7 @@ function Visual.showLoadingScreen()
     cardStrokeGrad.Parent = cardStroke
 
     local title = Instance.new("TextLabel")
-    title.Text = "LUNA"
+    title.Text = "MOON"
     title.Size = UDim2.new(1, 0, 0, 24)
     title.Position = UDim2.new(0, 0, 0, 14)
     title.BackgroundTransparency = 1
@@ -1201,7 +1251,7 @@ Visual._moonBtnGrad = moonButtonGrad
 local moonButtonText = Instance.new("TextLabel")
 moonButtonText.Size = UDim2.new(1, 0, 1, 0)
 moonButtonText.BackgroundTransparency = 1
-moonButtonText.Text = "LUNA"
+moonButtonText.Text = "MOON"
 moonButtonText.TextColor3 = Color3.new(1, 1, 1)
 moonButtonText.TextSize = 13
 moonButtonText.Font = Enum.Font.GothamBold
@@ -1486,8 +1536,8 @@ tabContainer.BorderSizePixel = 0
 tabContainer.ZIndex = 12
 tabContainer.Parent = body
 
-Visual.NormalTabs = {"Combat", "Visual", "Binds", "Cfg", "Patch"}
-Visual.RageTabs = {"Combat", "Visual", "Target", "Binds", "Cfg", "Patch"}
+Visual.NormalTabs = {"Combat", "Visual", "Binds", "UI", "Cfg", "Patch"}
+Visual.RageTabs = {"Combat", "Visual", "Target", "Binds", "UI", "Cfg", "Patch"}
 
 local tabButtons = {}
 local tabPages = {}
@@ -1497,8 +1547,8 @@ local currentTabs = {}
 local isRageMode = false
 Visual.isRageMode = false
 
--- Create 6 pages (max needed for rage mode)
-for i = 1, 6 do
+-- Create 7 pages (max needed for rage mode + UI)
+for i = 1, 7 do
     local page = Instance.new("ScrollingFrame")
     page.Name = "P" .. i
     page.Size = UDim2.new(1, 0, 1, 0)
@@ -1544,8 +1594,9 @@ function Visual.getMappedPage(tabIndex, rageMode)
     if rageMode then return tabIndex end
     if tabIndex <= 2 then return tabIndex end
     if tabIndex == 3 then return 4 end -- Binds
-    if tabIndex == 4 then return 5 end -- Cfg
-    return 6 -- Patch
+    if tabIndex == 4 then return 5 end -- UI
+    if tabIndex == 5 then return 6 end -- Cfg
+    return 7 -- Patch
 end
 
 local function refreshTabButtons()
@@ -1634,7 +1685,7 @@ function Visual.setRageMode(state)
     }):Play()
 
     rageButton.Text = state and "RAGE ON" or "RAGE"
-    moonButtonText.Text = state and "LUNA R" or "LUNA"
+    moonButtonText.Text = state and "MOON R" or "MOON"
 
     if activeTab > #(state and Visual.RageTabs or Visual.NormalTabs) then
         activeTab = 1
@@ -1691,8 +1742,8 @@ function Visual.makeSection(pi, text)
 
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
-            labelGrad.Color = Visual.getAuroraSequence(os.clock())
-            lineGrad.Color = Visual.getAuroraSequence(os.clock())
+            labelGrad.Color = Visual.ColorEngine.GetSequence(os.clock())
+            lineGrad.Color = Visual.ColorEngine.GetSequence(os.clock())
         end)
     end)
 end
@@ -2307,8 +2358,8 @@ function Visual.makeButton(pi, text, callback)
 
     table.insert(Visual.themeCallbacks, function()
         pcall(function()
-            labelGrad.Color = Visual.getAuroraSequence(os.clock())
-            rowGrad.Color = Visual.getAuroraSequence(os.clock())
+            labelGrad.Color = Visual.ColorEngine.GetSequence(os.clock())
+            rowGrad.Color = Visual.ColorEngine.GetSequence(os.clock())
         end)
     end)
 end
@@ -2369,6 +2420,7 @@ function Visual.closeMenu(CFG)
     }):Play()
     TweenService:Create(blurMain, TweenInfo.new(0.2), {Size = 0}):Play()
     Visual.PlaySound("Close", 0.22, 1)
+    if Visual._onMenuClose then Visual._onMenuClose() end
 
     rageButton.Visible = false
     task.delay(0.3, function()
@@ -2416,7 +2468,7 @@ end
 local themeTimer = 0
 
 function Visual.updateAnimations(dt, globalT)
-    local seq = Visual.getAuroraSequence(globalT)
+    local seq = Visual.ColorEngine.GetSequence(globalT)
 
     pcall(function() watermarkGrad.Color = seq end)
     pcall(function() watermarkStrokeGrad.Color = seq end)
