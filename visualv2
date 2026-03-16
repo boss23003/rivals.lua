@@ -950,7 +950,6 @@ function Visual.handleDrag(inputPos)
 end
 -- ═══ END PART 1 ═══
 return Visual
-return function(Visual)
 
 UserInputService.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -2106,3 +2105,18 @@ end
 
     return Visual
 end
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
