@@ -15,12 +15,12 @@ local BASE_W = 1920
 local BASE_H = 1080
 
 local auroraColors = {
-    Color3.fromRGB(255, 255, 255),
-    Color3.fromRGB(140, 100, 255),
-    Color3.fromRGB(15, 10, 30),
-    Color3.fromRGB(255, 245, 180),
-    Color3.fromRGB(90, 110, 255),
-    Color3.fromRGB(240, 240, 255)
+    Color3.fromRGB(130, 100, 255),
+    Color3.fromRGB(100, 140, 255),
+    Color3.fromRGB(170, 120, 255),
+    Color3.fromRGB(110, 180, 240),
+    Color3.fromRGB(155, 90, 220),
+    Color3.fromRGB(105, 170, 255)
 }
 local auroraCount = #auroraColors
 
@@ -315,7 +315,7 @@ Visual.wmTime = wmTime
 -- ═══ LOADING SCREEN ═══
 function Visual.showLoadingScreen()
     local lg = Instance.new("ScreenGui"); lg.Name = "MoonLoad"; lg.ResetOnSpawn = false; lg.DisplayOrder = 100000; lg.IgnoreGuiInset = true; safeParent(lg)
-    local blur = Instance.new("BlurEffect"); blur.Name = "MoonLoadBlur"; blur.Size = 0; blur.Parent = Lighting
+    local blur = {Size=0}
     local dim = Instance.new("Frame"); dim.Size = UDim2.new(1,0,1,0); dim.BackgroundColor3 = Color3.new(1,1,1); dim.BackgroundTransparency = 0.08; dim.BorderSizePixel = 0; dim.Parent = lg
     local dg = Instance.new("UIGradient"); dg.Color = Visual.getAuroraSequence(os.clock()); dg.Rotation = 30
     dg.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0,0.18),NumberSequenceKeypoint.new(1,0)}); dg.Parent = dim
@@ -347,7 +347,7 @@ function Visual.showLoadingScreen()
     pct.Font = Enum.Font.Code; pct.TextXAlignment = Enum.TextXAlignment.Center; pct.Parent = card
     local pg = Instance.new("UIGradient"); pg.Color = Visual.getAuroraSequence(os.clock())
     pg.Transparency = NumberSequence.new({NumberSequenceKeypoint.new(0,0.2),NumberSequenceKeypoint.new(1,0.5)}); pg.Parent = pct
-    TweenService:Create(blur,TweenInfo.new(0.5),{Size=18}):Play()
+    
     TweenService:Create(card,TweenInfo.new(0.5,Enum.EasingStyle.Quint),{BackgroundTransparency=0.08}):Play()
     TweenService:Create(cs,TweenInfo.new(0.5),{Transparency=0.14}):Play()
     TweenService:Create(tt,TweenInfo.new(0.5),{TextTransparency=0}):Play()
@@ -368,7 +368,7 @@ function Visual.showLoadingScreen()
         TweenService:Create(tt,TweenInfo.new(0.3),{TextTransparency=1}):Play()
         TweenService:Create(sub,TweenInfo.new(0.3),{TextTransparency=1}):Play()
         TweenService:Create(pct,TweenInfo.new(0.3),{TextTransparency=1}):Play()
-        TweenService:Create(blur,TweenInfo.new(0.3),{Size=0}):Play()
+    
         wait(0.4); pcall(function() blur:Destroy() end); pcall(function() lg:Destroy() end)
     end)()
 end
@@ -400,7 +400,7 @@ function Visual.updateChams(targets, CFG)
 end
 
 -- ═══ MAIN GUI SETUP ═══
-local blurMain = Instance.new("BlurEffect"); blurMain.Name = "MoonBlur"; blurMain.Size = 0; blurMain.Parent = Lighting; Visual.blurMain = blurMain
+Visual.blurMain = nil
 local gui = Instance.new("ScreenGui"); gui.Name = "MoonGUI_Main"; gui.ResetOnSpawn = false; gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.DisplayOrder = 999; gui.IgnoreGuiInset = true; safeParent(gui); Visual.gui = gui
 local guiScale = Instance.new("UIScale"); guiScale.Parent = gui
@@ -921,7 +921,7 @@ function Visual.openMenu(CFG)
     TweenService:Create(fullAurora,TweenInfo.new(0.35),{BackgroundTransparency=0.32}):Play()
     mainWindow.Size = UDim2.new(0,windowW*0.88,0,windowH*0.88); mainWindow.Position = UDim2.new(0.5,-windowW*0.44,0.5,-windowH*0.44); mainWindow.BackgroundTransparency = 0.5
     TweenService:Create(mainWindow,TweenInfo.new(0.35,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.new(0,windowW,0,windowH),Position=UDim2.new(0.5,-windowW/2,0.5,-windowH/2),BackgroundTransparency=0.08}):Play()
-    TweenService:Create(blurMain,TweenInfo.new(0.3),{Size=24}):Play(); Visual.PlaySound("Open",0.28,1)
+    Visual.PlaySound("Open",0.28,1)
     pcall(function() savedMouseBehavior = UserInputService.MouseBehavior; savedMouseIconEnabled = UserInputService.MouseIconEnabled
         UserInputService.MouseBehavior = Enum.MouseBehavior.Default; UserInputService.MouseIconEnabled = true end)
 end
@@ -931,7 +931,7 @@ function Visual.closeMenu(CFG)
     TweenService:Create(dimOverlay,TweenInfo.new(0.2),{BackgroundTransparency=1}):Play()
     TweenService:Create(fullAurora,TweenInfo.new(0.25),{BackgroundTransparency=1}):Play()
     TweenService:Create(mainWindow,TweenInfo.new(0.25,Enum.EasingStyle.Quint,Enum.EasingDirection.In),{Size=UDim2.new(0,windowW*0.88,0,windowH*0.88),BackgroundTransparency=1}):Play()
-    TweenService:Create(blurMain,TweenInfo.new(0.2),{Size=0}):Play(); Visual.PlaySound("Close",0.22,1)
+    Visual.PlaySound("Close",0.22,1)
     if Visual._onMenuClose then Visual._onMenuClose() end; rageBtn.Visible = false
     task.delay(0.3, function() if not menuOpen then mainWindow.Visible = false; dimOverlay.Visible = false; fullAurora.Visible = false; moonCanvas.Visible = false end end)
     pcall(function() if savedMouseBehavior then UserInputService.MouseBehavior = savedMouseBehavior end
@@ -949,7 +949,8 @@ function Visual.handleDrag(inputPos)
     end
 end
 -- ═══ END PART 1 ═══
--- ═══ START OF PART 2 ═══
+return Visual
+return function(Visual)
 
 UserInputService.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -1872,14 +1873,32 @@ function Visual.startUpdateLoop()
         -- Throttled to avoid heavy per-frame descendant scans.
         if (t - (Visual._lastGradientSweep or 0)) >= 0.08 then
             Visual._lastGradientSweep = t
+            local cfg5 = Visual.UIConfigs
+            local isClean = cfg5.ThemeMode == 5
+            local cleanText = ColorSequence.new(Color3.fromRGB(210, 215, 230))
+            local cleanAccent = ColorSequence.new(Color3.fromRGB(90, 130, 220))
+            local cleanStroke = ColorSequence.new(Color3.fromRGB(55, 60, 80))
+            local flatTrans = NumberSequence.new(0)
             local function applyTo(root)
                 if not root then return end
                 for _, d in ipairs(root:GetDescendants()) do
                     if d:IsA("UIGradient") then
-                        if d.Parent and d.Parent:IsA("UIStroke") then
-                            d.Color = stSeq
+                        if isClean then
+                            d.Transparency = flatTrans
+                            if d.Parent and d.Parent:IsA("UIStroke") then
+                                d.Color = cleanStroke
+                            elseif d.Parent and (d.Parent:IsA("TextLabel") or d.Parent:IsA("TextButton")) then
+                                d.Color = cleanText
+                            else
+                                d.Color = cleanAccent
+                            end
                         else
-                            d.Color = seq
+                            d.Transparency = d.Transparency
+                            if d.Parent and d.Parent:IsA("UIStroke") then
+                                d.Color = stSeq
+                            else
+                                d.Color = seq
+                            end
                         end
                     end
                 end
@@ -1890,10 +1909,9 @@ function Visual.startUpdateLoop()
             end)
         end
 
-        -- Apply UITransparency dynamically if Open
         local uiAlpha = Visual.UIConfigs.UITransparency or 0.15
         pcall(function()
-            if Visual.W and Visual.isOpen then
+            if Visual.W then
                 Visual.W.BackgroundTransparency = 0.08 + uiAlpha * 0.5
             end
         end)
@@ -2045,7 +2063,7 @@ function Visual.destroy()
         if Visual.gui then Visual.gui:Destroy() end
     end)
     pcall(function()
-        if Visual.blurMain then Visual.blurMain:Destroy() end
+        if Visual.blurMain then Visual.blurMain = nil end
     end)
 
     for _, child in ipairs(Lighting:GetChildren()) do
@@ -2086,4 +2104,5 @@ function Visual.init(CFG, allConnections)
     end)
 end
 
-return Visual
+    return Visual
+end
