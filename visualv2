@@ -1628,6 +1628,7 @@ Visual._updateConnection = nil
 Visual._lastFPSUpdate = 0
 Visual._frameCount = 0
 Visual._currentFPS = 60
+Visual._lastGradientSweep = 0
 
 function Visual.startUpdateLoop()
     if Visual._updateConnection then return end
@@ -1665,6 +1666,28 @@ function Visual.startUpdateLoop()
         -- Color Engine
         local seq = Visual.getSequence(t)
         local stSeq = Visual.getStrokeSequence(t)
+
+        -- Sweep-update gradients so the whole UI actually changes theme.
+        -- Throttled to avoid heavy per-frame descendant scans.
+        if (t - (Visual._lastGradientSweep or 0)) >= 0.08 then
+            Visual._lastGradientSweep = t
+            local function applyTo(root)
+                if not root then return end
+                for _, d in ipairs(root:GetDescendants()) do
+                    if d:IsA("UIGradient") then
+                        if d.Parent and d.Parent:IsA("UIStroke") then
+                            d.Color = stSeq
+                        else
+                            d.Color = seq
+                        end
+                    end
+                end
+            end
+            pcall(function()
+                applyTo(Visual.gui)
+                applyTo(Visual.screenGui)
+            end)
+        end
 
         -- Apply UITransparency dynamically if Open
         local uiAlpha = Visual.UIConfigs.UITransparency or 0.15
