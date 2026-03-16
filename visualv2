@@ -1,5 +1,5 @@
 --[[
-    ✦ GameUI Toolkit v3.5 — Interface Rendering Module
+    ✦ GameUI Toolkit v4.0 — Interface Rendering Module
     
     This module provides adaptive UI rendering for supported
     Roblox experiences. It handles theme management, layout
@@ -39,24 +39,13 @@ local _REF_HEIGHT = 1080
 --  rendering with sufficient contrast ratios (WCAG 2.1)
 -- ═══════════════════════════════════════════════════════
 
-local _PaletteA = {
-    Color3.fromRGB(130, 100, 255),
-    Color3.fromRGB(100, 140, 255),
-    Color3.fromRGB(170, 120, 255),
-    Color3.fromRGB(110, 180, 240),
-    Color3.fromRGB(155, 90,  220),
-    Color3.fromRGB(105, 170, 255)
-}
-local _PaletteALen = #_PaletteA
-
-local _PaletteB = {
-    Color3.fromRGB(200, 210, 240),
-    Color3.fromRGB(150, 170, 230),
-    Color3.fromRGB(180, 190, 255),
-    Color3.fromRGB(220, 230, 250),
-    Color3.fromRGB(170, 180, 220)
-}
-local _PaletteBLen = #_PaletteB
+-- Fixed color scheme: Red accent, Black background, Yellow branding
+local _ACCENT_COLOR  = Color3.fromRGB(200, 30, 30)
+local _ACCENT_SEQ    = ColorSequence.new(_ACCENT_COLOR)
+local _STROKE_COLOR  = Color3.fromRGB(100, 15, 15)
+local _STROKE_SEQ    = ColorSequence.new(_STROKE_COLOR)
+local _BG_COLOR      = Color3.fromRGB(15, 15, 15)
+local _BRAND_COLOR   = Color3.fromRGB(255, 200, 0)
 
 -- ═══════════════════════════════════════════════════════
 --  Layout preferences — must be initialized before
@@ -96,70 +85,7 @@ _LayoutEngine.themeCallbacks = {}
 -- ═══════════════════════════════════════════════════════
 
 function _LayoutEngine.getColor(_elapsed, _shift)
-    local _prefs = _LayoutEngine.UIConfigs
-    _shift = _shift or 0
-    local _rate = _prefs.ColorSpeed or 0.35
-    local _power = math.clamp(_prefs.ColorIntensity or 1, 0.1, 2)
-
-    -- Minimal theme: returns a flat neutral tone, no interpolation
-    if _prefs.ThemeMode == 5 then
-        return Color3.fromRGB(190, 190, 200)
-    end
-
-    local _result
-
-    if _prefs.ThemeMode == 1 then
-        -- Palette A: high-contrast accessible gradients
-        local _pos = ((_elapsed * _rate + _shift) % _PaletteALen)
-        local _lo = math.floor(_pos) % _PaletteALen + 1
-        local _hi = (_lo % _PaletteALen) + 1
-        local _alpha = _pos - math.floor(_pos)
-        _result = _PaletteA[_lo]:Lerp(_PaletteA[_hi], _alpha)
-
-    elseif _prefs.ThemeMode == 2 then
-        -- Palette B: subdued tones for reduced eye strain
-        local _pos = ((_elapsed * _rate + _shift) % _PaletteBLen)
-        local _lo = math.floor(_pos) % _PaletteBLen + 1
-        local _hi = (_lo % _PaletteBLen) + 1
-        local _alpha = _pos - math.floor(_pos)
-        _result = _PaletteB[_lo]:Lerp(_PaletteB[_hi], _alpha)
-
-    elseif _prefs.ThemeMode == 3 then
-        -- Static theme: fixed neutral-cool accent
-        _result = Color3.fromRGB(220, 225, 255)
-
-    elseif _prefs.ThemeMode == 4 then
-        -- User-defined custom palette interpolation
-        local _userPalette = _prefs.CustomColors
-        local _count = #_userPalette
-        if _count == 0 then return Color3.new(1, 1, 1) end
-        if _count == 1 then
-            _result = _userPalette[1]
-        else
-            local _pos = ((_elapsed * _rate + _shift) % _count)
-            local _lo = math.floor(_pos) % _count + 1
-            local _hi = (_lo % _count) + 1
-            local _alpha = _pos - math.floor(_pos)
-            _result = _userPalette[_lo]:Lerp(_userPalette[_hi], _alpha)
-        end
-    else
-        _result = Color3.fromRGB(200, 200, 210)
-    end
-
-    -- Apply intensity adjustment for accessibility
-    -- Values below 1.0 reduce vibrancy, above 1.0 boost it
-    if _power < 1 then
-        _result = _result:Lerp(Color3.fromRGB(40, 40, 50), 1 - _power)
-    elseif _power > 1 then
-        local _boost = _power - 1
-        _result = Color3.new(
-            math.clamp(_result.R + _boost * 0.3, 0, 1),
-            math.clamp(_result.G + _boost * 0.3, 0, 1),
-            math.clamp(_result.B + _boost * 0.3, 0, 1)
-        )
-    end
-
-    return _result
+    return _ACCENT_COLOR
 end
 
 -- ═══════════════════════════════════════════════════════
@@ -169,13 +95,7 @@ end
 -- ═══════════════════════════════════════════════════════
 
 function _LayoutEngine.getAuroraColor(_elapsed, _shift)
-    _shift = _shift or 0
-    local _rate = 0.35
-    local _pos = ((_elapsed * _rate + _shift) % _PaletteALen)
-    local _lo = math.floor(_pos) % _PaletteALen + 1
-    local _hi = (_lo % _PaletteALen) + 1
-    local _alpha = _pos - math.floor(_pos)
-    return _PaletteA[_lo]:Lerp(_PaletteA[_hi], _alpha)
+    return _ACCENT_COLOR
 end
 
 -- ═══════════════════════════════════════════════════════
@@ -185,33 +105,11 @@ end
 -- ═══════════════════════════════════════════════════════
 
 function _LayoutEngine.getSequence(_elapsed)
-    local _prefs = _LayoutEngine.UIConfigs
-    -- Minimal/static themes and disabled gradient → solid fill
-    if _prefs.ThemeMode == 5 or not _prefs.GradientEnabled or _prefs.ThemeMode == 3 then
-        return ColorSequence.new(_LayoutEngine.getColor(_elapsed, 0))
-    end
-    return ColorSequence.new({
-        ColorSequenceKeypoint.new(0,   _LayoutEngine.getColor(_elapsed, 0)),
-        ColorSequenceKeypoint.new(0.5, _LayoutEngine.getColor(_elapsed, 2)),
-        ColorSequenceKeypoint.new(1,   _LayoutEngine.getColor(_elapsed, 4))
-    })
+    return _ACCENT_SEQ
 end
 
 function _LayoutEngine.getAuroraSequence(_elapsed)
-    local _prefs = _LayoutEngine.UIConfigs
-    if _prefs.ThemeMode == 5 or not _prefs.GradientEnabled then
-        return ColorSequence.new(_LayoutEngine.getColor(_elapsed, 0))
-    end
-    if _prefs.ThemeMode == 3 then
-        return ColorSequence.new(_LayoutEngine.getColor(_elapsed, 0))
-    end
-    return ColorSequence.new({
-        ColorSequenceKeypoint.new(0,    _LayoutEngine.getAuroraColor(_elapsed, 0)),
-        ColorSequenceKeypoint.new(0.25, _LayoutEngine.getAuroraColor(_elapsed, 1.2)),
-        ColorSequenceKeypoint.new(0.5,  _LayoutEngine.getAuroraColor(_elapsed, 2.4)),
-        ColorSequenceKeypoint.new(0.75, _LayoutEngine.getAuroraColor(_elapsed, 3.6)),
-        ColorSequenceKeypoint.new(1,    _LayoutEngine.getAuroraColor(_elapsed, 4.8))
-    })
+    return _ACCENT_SEQ
 end
 
 -- ═══════════════════════════════════════════════════════
@@ -221,22 +119,11 @@ end
 -- ═══════════════════════════════════════════════════════
 
 function _LayoutEngine.getStrokeColor(_elapsed, _shift)
-    _shift = _shift or 0
-    local _base = _LayoutEngine.getColor(_elapsed, _shift)
-    local _mix = 1 - (_LayoutEngine.UIConfigs.StrokeTransparency or 0.15)
-    return _base:Lerp(Color3.new(0, 0, 0), 0.7 * _mix)
+    return _STROKE_COLOR
 end
 
 function _LayoutEngine.getStrokeSequence(_elapsed)
-    local _prefs = _LayoutEngine.UIConfigs
-    if _prefs.ThemeMode == 5 or not _prefs.GradientEnabled then
-        return ColorSequence.new(_LayoutEngine.getStrokeColor(_elapsed, 0))
-    end
-    return ColorSequence.new({
-        ColorSequenceKeypoint.new(0,   _LayoutEngine.getStrokeColor(_elapsed, 0)),
-        ColorSequenceKeypoint.new(0.5, _LayoutEngine.getStrokeColor(_elapsed, 2)),
-        ColorSequenceKeypoint.new(1,   _LayoutEngine.getStrokeColor(_elapsed, 4))
-    })
+    return _STROKE_SEQ
 end
 
 -- Public API surface for external modules that need
@@ -412,7 +299,7 @@ function _LayoutEngine.Ripple(_target, _px, _py)
     if not _target or not _target.Parent then return end
 
     local _circle = Instance.new("Frame")
-    _circle.BackgroundColor3      = Color3.new(1, 1, 1)
+    _circle.BackgroundColor3      = _ACCENT_COLOR
     _circle.BackgroundTransparency = 0.45
     _circle.BorderSizePixel       = 0
     _circle.ZIndex                = (_target.ZIndex or 1) + 5
@@ -472,7 +359,7 @@ function _LayoutEngine.Notify(_heading, _body, _seconds, _accent)
     -- Card container
     local _card = Instance.new("Frame")
     _card.Size                  = UDim2.new(1, 0, 0, 60)
-    _card.BackgroundColor3      = Color3.new(1, 1, 1)
+    _card.BackgroundColor3      = Color3.fromRGB(20, 20, 20)
     _card.BackgroundTransparency = 0.12
     _card.BorderSizePixel       = 0
     _card.ClipsDescendants      = true
@@ -492,6 +379,7 @@ function _LayoutEngine.Notify(_heading, _body, _seconds, _accent)
 
     local _cardStroke = Instance.new("UIStroke")
     _cardStroke.Thickness    = 1.2
+    _cardStroke.Color        = _STROKE_COLOR
     _cardStroke.Transparency = 0.1
     _cardStroke.Parent       = _card
 
@@ -606,7 +494,7 @@ end
 local _statusBadge = Instance.new("Frame")
 _statusBadge.Size                  = UDim2.new(0, 220, 0, 28)
 _statusBadge.Position              = UDim2.new(0, 20, 0, 20)
-_statusBadge.BackgroundColor3      = Color3.new(1, 1, 1)
+_statusBadge.BackgroundColor3      = _BG_COLOR
 _statusBadge.BackgroundTransparency = 0.12
 _statusBadge.BorderSizePixel       = 0
 _statusBadge.ZIndex                = 100
@@ -639,8 +527,8 @@ local _verLabel = Instance.new("TextLabel")
 _verLabel.Size                  = UDim2.new(0, 100, 1, 0)
 _verLabel.Position              = UDim2.new(0, 10, 0, 0)
 _verLabel.BackgroundTransparency = 1
-_verLabel.Text                  = "MOON v3.5"
-_verLabel.TextColor3            = Color3.new(1, 1, 1)
+_verLabel.Text                  = "MOON v4.0"
+_verLabel.TextColor3            = _BRAND_COLOR
 _verLabel.TextSize              = 11
 _verLabel.Font                  = Enum.Font.GothamBold
 _verLabel.TextXAlignment        = Enum.TextXAlignment.Left
@@ -697,15 +585,12 @@ function _LayoutEngine.showLoadingScreen()
     _splashGui.IgnoreGuiInset = true
     _resolveParent(_splashGui)
 
-    local _blurRef = Instance.new("BlurEffect")
-    _blurRef.Size   = 0
-    _blurRef.Name   = "MoonLoadBlur"
-    _blurRef.Parent = game:GetService("Lighting")
+    local _blurRef = nil
 
     -- Full-screen dimming overlay
     local _dimLayer = Instance.new("Frame")
     _dimLayer.Size                  = UDim2.new(1, 0, 1, 0)
-    _dimLayer.BackgroundColor3      = Color3.new(1, 1, 1)
+    _dimLayer.BackgroundColor3      = Color3.new(0, 0, 0)
     _dimLayer.BackgroundTransparency = 0.08
     _dimLayer.BorderSizePixel       = 0
     _dimLayer.Parent                = _splashGui
@@ -723,7 +608,7 @@ function _LayoutEngine.showLoadingScreen()
     local _splashCard = Instance.new("Frame")
     _splashCard.Size                  = UDim2.new(0, 360, 0, 108)
     _splashCard.Position              = UDim2.new(0.5, -180, 0.5, -54)
-    _splashCard.BackgroundColor3      = Color3.new(1, 1, 1)
+    _splashCard.BackgroundColor3      = _BG_COLOR
     _splashCard.BackgroundTransparency = 1
     _splashCard.BorderSizePixel       = 0
     _splashCard.Parent                = _splashGui
@@ -791,7 +676,7 @@ function _LayoutEngine.showLoadingScreen()
     _progressTrack.Size                  = UDim2.new(0, 0, 0, 3)
     _progressTrack.Position              = UDim2.new(0.5, 0, 0, 72)
     _progressTrack.AnchorPoint           = Vector2.new(0.5, 0)
-    _progressTrack.BackgroundColor3      = Color3.new(1, 1, 1)
+    _progressTrack.BackgroundColor3      = Color3.fromRGB(40, 40, 40)
     _progressTrack.BackgroundTransparency = 0.7
     _progressTrack.BorderSizePixel       = 0
     _progressTrack.Parent                = _splashCard
@@ -805,7 +690,7 @@ function _LayoutEngine.showLoadingScreen()
     -- Progress fill
     local _progressFill = Instance.new("Frame")
     _progressFill.Size             = UDim2.new(0, 0, 1, 0)
-    _progressFill.BackgroundColor3 = Color3.new(1, 1, 1)
+    _progressFill.BackgroundColor3 = _ACCENT_COLOR
     _progressFill.BorderSizePixel  = 0
     _progressFill.Parent           = _progressTrack
 
@@ -890,7 +775,7 @@ function _LayoutEngine.showLoadingScreen()
         _AnimationService:Create(_pctLabel,    TweenInfo.new(0.3), {TextTransparency = 1}):Play()
 
         wait(0.4)
-        pcall(function() _blurRef:Destroy() end)
+        pcall(function() if _blurRef then _blurRef:Destroy() end end)
         pcall(function() _splashGui:Destroy() end)
     end)()
 end
@@ -1024,7 +909,7 @@ end)()
 
 local _bgOverlay = Instance.new("Frame")
 _bgOverlay.Size                  = UDim2.new(1, 0, 1, 0)
-_bgOverlay.BackgroundColor3      = Color3.new(1, 1, 1)
+_bgOverlay.BackgroundColor3      = Color3.new(0, 0, 0)
 _bgOverlay.BackgroundTransparency = 1
 _bgOverlay.BorderSizePixel       = 0
 _bgOverlay.ZIndex                = 7
@@ -1070,8 +955,8 @@ _crescentCanvas.Parent                = _rootSurface
 local _crescentOuter = Instance.new("Frame")
 _crescentOuter.Size                  = UDim2.new(0, 70, 0, 70)
 _crescentOuter.Position              = UDim2.new(0.5, -35, 0.5, -35)
-_crescentOuter.BackgroundColor3      = Color3.new(1, 1, 1)
-_crescentOuter.BackgroundTransparency = 0.15
+_crescentOuter.BackgroundColor3      = _BRAND_COLOR
+_crescentOuter.BackgroundTransparency = 0.1
 _crescentOuter.BorderSizePixel       = 0
 _crescentOuter.ZIndex                = 151
 _crescentOuter.Parent                = _crescentCanvas
@@ -1086,7 +971,7 @@ _LayoutEngine._moonOuterGrad = _coGrad
 local _crescentCut = Instance.new("Frame")
 _crescentCut.Size                  = UDim2.new(0, 58, 0, 58)
 _crescentCut.Position              = UDim2.new(0.5, -18, 0.5, -29)
-_crescentCut.BackgroundColor3      = Color3.fromRGB(6, 3, 12)
+_crescentCut.BackgroundColor3      = Color3.fromRGB(10, 10, 10)
 _crescentCut.BackgroundTransparency = 0.05
 _crescentCut.BorderSizePixel       = 0
 _crescentCut.ZIndex                = 152
@@ -1106,8 +991,8 @@ _LayoutEngine.moonOuter  = _crescentOuter
 local _keybindPanel = Instance.new("Frame")
 _keybindPanel.Size                  = UDim2.new(0, 188, 0, 28)
 _keybindPanel.Position              = UDim2.new(1, -210, 0, 56)
-_keybindPanel.BackgroundColor3      = Color3.new(1, 1, 1)
-_keybindPanel.BackgroundTransparency = 0.12
+_keybindPanel.BackgroundColor3      = _BG_COLOR
+_keybindPanel.BackgroundTransparency = 0.05
 _keybindPanel.BorderSizePixel       = 0
 _keybindPanel.ZIndex                = 100
 _keybindPanel.ClipsDescendants      = true
@@ -1191,12 +1076,13 @@ end)
 
 -- State change cache for detecting transitions
 _LayoutEngine._bindsStateCache = {}
+_LayoutEngine._lastBindsHash = ""
 
 -- Animated event row that appears briefly when a bind state changes
 function _LayoutEngine.pushBindEvent(_text)
     local _evRow = Instance.new("Frame")
     _evRow.Size                  = UDim2.new(1, 0, 0, 0)
-    _evRow.BackgroundColor3      = Color3.new(1, 1, 1)
+    _evRow.BackgroundColor3      = Color3.fromRGB(30, 30, 30)
     _evRow.BackgroundTransparency = 0.16
     _evRow.BorderSizePixel       = 0
     _evRow.ZIndex                = 104
@@ -1313,28 +1199,36 @@ function _LayoutEngine.updateActiveBinds(_cfg, _ctx, _assistActive, _lockActive,
     if _cfg.RageDash   then _addItem("R.Dash",   true, "") end
     if _cfg.RageTarget then _addItem("R.Target", true, "") end
 
+    -- Build hash to detect if rows actually changed
+    local _stateHash = ""
+    for _, _item in ipairs(_activeItems) do
+        _stateHash = _stateHash .. _item.n .. tostring(_item.a) .. _item.k .. ";"
+    end
+
+    -- Only rebuild rows if state actually changed (prevents flickering)
+    if _stateHash == _LayoutEngine._lastBindsHash then return end
+    _LayoutEngine._lastBindsHash = _stateHash
+
+    -- Clear previous static rows
+    for _, _child in ipairs(_kpContent:GetChildren()) do
+        if _child:IsA("Frame") and _child.Name == "BindStateRow" then
+            _child:Destroy()
+        end
+    end
+
     -- Render rows
     for _idx, _item in ipairs(_activeItems) do
         local _row = Instance.new("Frame")
         _row.Name                   = "BindStateRow"
         _row.Size                   = UDim2.new(1, 0, 0, 18)
-        _row.BackgroundColor3       = Color3.new(1, 1, 1)
-        _row.BackgroundTransparency = 0.22
+        _row.BackgroundColor3       = Color3.fromRGB(25, 25, 25)
+        _row.BackgroundTransparency = 0.1
         _row.BorderSizePixel        = 0
         _row.ZIndex                 = 102
         _row.LayoutOrder            = 1000 + _idx
         _row.Parent                 = _kpContent
 
         Instance.new("UICorner", _row).CornerRadius = UDim.new(0, 7)
-
-        local _rGrad = Instance.new("UIGradient")
-        _rGrad.Color    = _LayoutEngine.getAuroraSequence(os.clock() + _idx)
-        _rGrad.Rotation = 25
-        _rGrad.Transparency = NumberSequence.new({
-            NumberSequenceKeypoint.new(0, 0.3),
-            NumberSequenceKeypoint.new(1, 0.12)
-        })
-        _rGrad.Parent = _row
 
         local _rLabel = Instance.new("TextLabel")
         _rLabel.Size                  = UDim2.new(1, -10, 1, 0)
@@ -1347,10 +1241,6 @@ function _LayoutEngine.updateActiveBinds(_cfg, _ctx, _assistActive, _lockActive,
         _rLabel.TextXAlignment        = Enum.TextXAlignment.Left
         _rLabel.ZIndex                = 103
         _rLabel.Parent                = _row
-
-        local _rlGrad = Instance.new("UIGradient")
-        _rlGrad.Color  = _LayoutEngine.getAuroraSequence(os.clock() + _idx * 0.2)
-        _rlGrad.Parent = _rLabel
     end
 
     -- Auto-resize panel to fit content
@@ -1373,8 +1263,8 @@ local _HUD_LINES = 18
 local _hudPanel = Instance.new("Frame")
 _hudPanel.Size                  = UDim2.new(0, 220, 0, 180)
 _hudPanel.Position              = UDim2.new(0, 20, 0.5, -90)
-_hudPanel.BackgroundColor3      = Color3.new(1, 1, 1)
-_hudPanel.BackgroundTransparency = 0.14
+_hudPanel.BackgroundColor3      = _BG_COLOR
+_hudPanel.BackgroundTransparency = 0.05
 _hudPanel.BorderSizePixel       = 0
 _hudPanel.ZIndex                = 5
 _hudPanel.Visible               = false
@@ -1462,8 +1352,8 @@ local _mainWindow = Instance.new("Frame")
 _mainWindow.Name                  = "W"
 _mainWindow.Size                  = UDim2.new(0, _winW, 0, _winH)
 _mainWindow.Position              = UDim2.new(0.5, -_winW / 2, 0.5, -_winH / 2)
-_mainWindow.BackgroundColor3      = Color3.new(1, 1, 1)
-_mainWindow.BackgroundTransparency = 0.15
+_mainWindow.BackgroundColor3      = Color3.fromRGB(10, 10, 10)
+_mainWindow.BackgroundTransparency = 0.05
 _mainWindow.BorderSizePixel       = 0
 _mainWindow.Visible               = false
 _mainWindow.ZIndex                = 10
@@ -1497,7 +1387,7 @@ _LayoutEngine.gSt      = _mwStroke
 -- Enhanced mode visual overlay (red-tinted gradient)
 local _enhancedOverlay = Instance.new("Frame")
 _enhancedOverlay.Size                  = UDim2.new(1, 0, 1, 0)
-_enhancedOverlay.BackgroundColor3      = Color3.new(1, 1, 1)
+_enhancedOverlay.BackgroundColor3      = _ACCENT_COLOR
 _enhancedOverlay.BackgroundTransparency = 1
 _enhancedOverlay.BorderSizePixel       = 0
 _enhancedOverlay.ZIndex                = 10
@@ -1524,7 +1414,7 @@ for _i = 1, 24 do
     local _sz = math.random(1, 2)
     _star.Size                  = UDim2.new(0, _sz, 0, _sz)
     _star.Position              = UDim2.new(0, math.random(10, _winW - 10), 0, math.random(60, _winH - 10))
-    _star.BackgroundColor3      = Color3.fromRGB(200, 190, 255)
+    _star.BackgroundColor3      = _ACCENT_COLOR
     _star.BackgroundTransparency = math.random(50, 80) / 100
     _star.BorderSizePixel       = 0
     _star.ZIndex                = 11
@@ -1541,8 +1431,8 @@ _LayoutEngine.guiStars = _starDecor
 
 local _headerBar = Instance.new("Frame")
 _headerBar.Size                  = UDim2.new(1, 0, 0, 48)
-_headerBar.BackgroundColor3      = Color3.new(1, 1, 1)
-_headerBar.BackgroundTransparency = 0.14
+_headerBar.BackgroundColor3      = Color3.fromRGB(20, 20, 20)
+_headerBar.BackgroundTransparency = 0.05
 _headerBar.BorderSizePixel       = 0
 _headerBar.ZIndex                = 12
 _headerBar.Parent                = _mainWindow
@@ -1564,7 +1454,7 @@ _LayoutEngine.tB = _headerBar
 local _headerAccent = Instance.new("Frame")
 _headerAccent.Size                  = UDim2.new(1, 0, 0, 2)
 _headerAccent.Position              = UDim2.new(0, 0, 1, -2)
-_headerAccent.BackgroundColor3      = Color3.new(1, 1, 1)
+_headerAccent.BackgroundColor3      = _ACCENT_COLOR
 _headerAccent.BackgroundTransparency = 0.08
 _headerAccent.BorderSizePixel       = 0
 _headerAccent.ZIndex                = 14
@@ -1582,8 +1472,8 @@ _LayoutEngine._tLGrad = _haGrad
 local _brandBtn = Instance.new("Frame")
 _brandBtn.Size                  = UDim2.new(0, 96, 0, 30)
 _brandBtn.Position              = UDim2.new(0, 10, 0.5, -15)
-_brandBtn.BackgroundColor3      = Color3.new(1, 1, 1)
-_brandBtn.BackgroundTransparency = 0.1
+_brandBtn.BackgroundColor3      = _ACCENT_COLOR
+_brandBtn.BackgroundTransparency = 0.05
 _brandBtn.BorderSizePixel       = 0
 _brandBtn.ZIndex                = 15
 _brandBtn.ClipsDescendants      = true
@@ -1604,7 +1494,7 @@ local _brandLabel = Instance.new("TextLabel")
 _brandLabel.Size                  = UDim2.new(1, 0, 1, 0)
 _brandLabel.BackgroundTransparency = 1
 _brandLabel.Text                  = "MOON"
-_brandLabel.TextColor3            = Color3.new(1, 1, 1)
+_brandLabel.TextColor3            = _BRAND_COLOR
 _brandLabel.TextSize              = 13
 _brandLabel.Font                  = Enum.Font.GothamBold
 _brandLabel.ZIndex                = 16
@@ -1630,8 +1520,8 @@ local _stateBadge = Instance.new("TextLabel")
 _stateBadge.Text                  = "OFF"
 _stateBadge.Size                  = UDim2.new(0, 62, 0, 24)
 _stateBadge.Position              = UDim2.new(0, 116, 0.5, -12)
-_stateBadge.BackgroundColor3      = Color3.new(1, 1, 1)
-_stateBadge.BackgroundTransparency = 0.12
+_stateBadge.BackgroundColor3      = _ACCENT_COLOR
+_stateBadge.BackgroundTransparency = 0.05
 _stateBadge.TextColor3            = Color3.new(1, 1, 1)
 _stateBadge.TextSize              = 10
 _stateBadge.Font                  = Enum.Font.GothamBold
@@ -1716,8 +1606,8 @@ local function _createHeaderButton(_label, _xOffset, _handler)
     _btn.Text                  = _label
     _btn.Size                  = UDim2.new(0, 32, 0, 26)
     _btn.Position              = UDim2.new(1, _xOffset, 0.5, -13)
-    _btn.BackgroundColor3      = Color3.new(1, 1, 1)
-    _btn.BackgroundTransparency = 0.12
+    _btn.BackgroundColor3      = Color3.fromRGB(40, 40, 40)
+    _btn.BackgroundTransparency = 0.05
     _btn.TextColor3            = Color3.new(1, 1, 1)
     _btn.TextSize              = 13
     _btn.Font                  = Enum.Font.GothamBold
@@ -1786,7 +1676,7 @@ _LayoutEngine._minBtnG = _minBtnGrad
 local _enhanceBtn = Instance.new("TextButton")
 _enhanceBtn.Size                  = UDim2.new(0, 98, 0, 28)
 _enhanceBtn.Position              = UDim2.new(0, 18, 1, -50)
-_enhanceBtn.BackgroundColor3      = Color3.new(1, 1, 1)
+_enhanceBtn.BackgroundColor3      = Color3.fromRGB(180, 30, 30)
 _enhanceBtn.BackgroundTransparency = 0.1
 _enhanceBtn.Text                  = "RAGE"
 _enhanceBtn.TextColor3            = Color3.new(1, 1, 1)
@@ -1860,8 +1750,8 @@ _contentBody.Parent                = _mainWindow
 
 local _tabStrip = Instance.new("Frame")
 _tabStrip.Size                  = UDim2.new(1, 0, 0, 36)
-_tabStrip.BackgroundColor3      = Color3.new(1, 1, 1)
-_tabStrip.BackgroundTransparency = 0.14
+_tabStrip.BackgroundColor3      = Color3.fromRGB(20, 20, 20)
+_tabStrip.BackgroundTransparency = 0.05
 _tabStrip.BorderSizePixel       = 0
 _tabStrip.ZIndex                = 13
 _tabStrip.Parent                = _contentBody
@@ -1880,7 +1770,7 @@ _LayoutEngine._tabBarGrad = _tsGrad
 local _tabIndicator = Instance.new("Frame")
 _tabIndicator.Size             = UDim2.new(0, 0, 0, 2)
 _tabIndicator.Position         = UDim2.new(0, 0, 1, -2)
-_tabIndicator.BackgroundColor3 = Color3.new(1, 1, 1)
+_tabIndicator.BackgroundColor3 = _ACCENT_COLOR
 _tabIndicator.BorderSizePixel  = 0
 _tabIndicator.ZIndex           = 15
 _tabIndicator.Parent           = _tabStrip
@@ -2121,7 +2011,7 @@ function _LayoutEngine.makeSection(_pi, _text)
     local _underline = Instance.new("Frame")
     _underline.Size                  = UDim2.new(1, 0, 0, 1)
     _underline.Position              = UDim2.new(0, 0, 1, -1)
-    _underline.BackgroundColor3      = Color3.new(1, 1, 1)
+    _underline.BackgroundColor3      = _ACCENT_COLOR
     _underline.BackgroundTransparency = 0.55
     _underline.BorderSizePixel       = 0
     _underline.ZIndex                = 20
@@ -2131,20 +2021,14 @@ function _LayoutEngine.makeSection(_pi, _text)
     _ulGrad.Color  = _LayoutEngine.getSequence(os.clock())
     _ulGrad.Parent = _underline
 
-    table.insert(_LayoutEngine.themeCallbacks, function()
-        pcall(function()
-            _lGrad.Color  = _LayoutEngine.getSequence(os.clock())
-            _ulGrad.Color = _LayoutEngine.getSequence(os.clock())
-        end)
-    end)
 end
 
 -- Toggle switch with animated pill and glow
 function _LayoutEngine.makeToggle(_pi, _text, _key, _cfg, _onChanged)
     local _row = Instance.new("Frame")
     _row.Size                  = UDim2.new(1, -4, 0, 36)
-    _row.BackgroundColor3      = Color3.new(1, 1, 1)
-    _row.BackgroundTransparency = 0.85
+    _row.BackgroundColor3      = Color3.fromRGB(25, 25, 25)
+    _row.BackgroundTransparency = 0.15
     _row.BorderSizePixel       = 0
     _row.ZIndex                = 18
     _row.LayoutOrder           = _nextOrder(_pi)
@@ -2192,8 +2076,8 @@ function _LayoutEngine.makeToggle(_pi, _text, _key, _cfg, _onChanged)
     local _pill = Instance.new("Frame")
     _pill.Size                  = UDim2.new(0, 40, 0, 20)
     _pill.Position              = UDim2.new(1, -48, 0.5, -10)
-    _pill.BackgroundColor3      = Color3.new(1, 1, 1)
-    _pill.BackgroundTransparency = _cfg[_key] and 0.08 or 0.7
+    _pill.BackgroundColor3      = _cfg[_key] and _ACCENT_COLOR or Color3.fromRGB(50, 50, 50)
+    _pill.BackgroundTransparency = 0.05
     _pill.BorderSizePixel       = 0
     _pill.ZIndex                = 20
     _pill.Parent                = _row
@@ -2212,7 +2096,7 @@ function _LayoutEngine.makeToggle(_pi, _text, _key, _cfg, _onChanged)
     local _knob = Instance.new("Frame")
     _knob.Size             = UDim2.new(0, 14, 0, 14)
     _knob.Position         = _cfg[_key] and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
-    _knob.BackgroundColor3 = Color3.new(1, 1, 1)
+    _knob.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
     _knob.BorderSizePixel  = 0
     _knob.ZIndex           = 21
     _knob.Parent           = _pill
@@ -2223,7 +2107,7 @@ function _LayoutEngine.makeToggle(_pi, _text, _key, _cfg, _onChanged)
     local _glow = Instance.new("Frame")
     _glow.Size                  = UDim2.new(1, 6, 1, 6)
     _glow.Position              = UDim2.new(0, -3, 0, -3)
-    _glow.BackgroundColor3      = _LayoutEngine.getColor(os.clock(), 0)
+    _glow.BackgroundColor3      = _ACCENT_COLOR
     _glow.BackgroundTransparency = _cfg[_key] and 0.85 or 1
     _glow.BorderSizePixel       = 0
     _glow.ZIndex                = 19
@@ -2258,7 +2142,8 @@ function _LayoutEngine.makeToggle(_pi, _text, _key, _cfg, _onChanged)
         _LayoutEngine.Ripple(_row, _mpos.X - _row.AbsolutePosition.X, _mpos.Y - _row.AbsolutePosition.Y)
 
         _AnimationService:Create(_pill, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-            BackgroundTransparency = _on and 0.08 or 0.7
+            BackgroundColor3 = _on and _ACCENT_COLOR or Color3.fromRGB(50, 50, 50),
+            BackgroundTransparency = 0.05
         }):Play()
         _AnimationService:Create(_knob, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
             Position = _on and UDim2.new(1, -17, 0.5, -7) or UDim2.new(0, 3, 0.5, -7)
@@ -2270,14 +2155,6 @@ function _LayoutEngine.makeToggle(_pi, _text, _key, _cfg, _onChanged)
         if _onChanged then _onChanged(_on) end
     end)
 
-    table.insert(_LayoutEngine.themeCallbacks, function()
-        pcall(function()
-            _rlGrad.Color  = _LayoutEngine.getSequence(os.clock())
-            _pillGrad.Color = _LayoutEngine.getSequence(os.clock())
-            _glow.BackgroundColor3 = _LayoutEngine.getColor(os.clock(), 0)
-            _rowGrad.Color = _LayoutEngine.getSequence(os.clock())
-        end)
-    end)
 end
 
 -- Range slider with draggable knob
@@ -2353,8 +2230,8 @@ function _LayoutEngine.makeSlider(_pi, _text, _key, _mn, _mx, _step, _cfg, _conn
     local _track = Instance.new("Frame")
     _track.Size                  = UDim2.new(1, 0, 0, 6)
     _track.Position              = UDim2.new(0, 0, 0, 24)
-    _track.BackgroundColor3      = Color3.new(1, 1, 1)
-    _track.BackgroundTransparency = 0.7
+    _track.BackgroundColor3      = Color3.fromRGB(40, 40, 40)
+    _track.BackgroundTransparency = 0.2
     _track.BorderSizePixel       = 0
     _track.ZIndex                = 20
     _track.Parent                = _row
@@ -2374,27 +2251,19 @@ function _LayoutEngine.makeSlider(_pi, _text, _key, _mn, _mx, _step, _cfg, _conn
 
     local _fill = Instance.new("Frame")
     _fill.Size             = UDim2.new(_pct, 0, 1, 0)
-    _fill.BackgroundColor3 = Color3.new(1, 1, 1)
+    _fill.BackgroundColor3 = _ACCENT_COLOR
     _fill.BorderSizePixel  = 0
     _fill.ZIndex           = 21
     _fill.Parent           = _track
 
     Instance.new("UICorner", _fill).CornerRadius = UDim.new(0, 3)
 
-    local _fGrad = Instance.new("UIGradient")
-    _fGrad.Color = _LayoutEngine.getSequence(os.clock())
-    _fGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.15),
-        NumberSequenceKeypoint.new(1, 0.02)
-    })
-    _fGrad.Parent = _fill
-
     -- Draggable knob
     local _knob = Instance.new("TextButton")
     _knob.Size             = UDim2.new(0, 16, 0, 16)
     _knob.AnchorPoint      = Vector2.new(0.5, 0.5)
     _knob.Position         = UDim2.new(_pct, 0, 0.5, 0)
-    _knob.BackgroundColor3 = Color3.new(1, 1, 1)
+    _knob.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
     _knob.Text             = ""
     _knob.AutoButtonColor  = false
     _knob.BorderSizePixel  = 0
@@ -2412,15 +2281,6 @@ function _LayoutEngine.makeSlider(_pi, _text, _key, _mn, _mx, _step, _cfg, _conn
     _kStroke.Color        = Color3.fromRGB(6, 3, 12)
     _kStroke.Transparency = 0.3
     _kStroke.Parent       = _knob
-
-    table.insert(_LayoutEngine.themeCallbacks, function()
-        pcall(function()
-            _lGrad.Color = _LayoutEngine.getSequence(os.clock())
-            _vGrad.Color = _LayoutEngine.getSequence(os.clock() + 0.5)
-            _fGrad.Color = _LayoutEngine.getSequence(os.clock())
-            _kGrad.Color = _LayoutEngine.getSequence(os.clock())
-        end)
-    end)
 
     local _dragging = false
 
@@ -2472,8 +2332,8 @@ end
 function _LayoutEngine.makeCycle(_pi, _text, _opts, _key, _cfg, _onChanged)
     local _row = Instance.new("Frame")
     _row.Size                  = UDim2.new(1, -4, 0, 36)
-    _row.BackgroundColor3      = Color3.new(1, 1, 1)
-    _row.BackgroundTransparency = 0.85
+    _row.BackgroundColor3      = Color3.fromRGB(25, 25, 25)
+    _row.BackgroundTransparency = 0.15
     _row.BorderSizePixel       = 0
     _row.ZIndex                = 18
     _row.LayoutOrder           = _nextOrder(_pi)
@@ -2564,13 +2424,6 @@ function _LayoutEngine.makeCycle(_pi, _text, _opts, _key, _cfg, _onChanged)
         if _onChanged then _onChanged(_idx) end
     end)
 
-    table.insert(_LayoutEngine.themeCallbacks, function()
-        pcall(function()
-            _cGrad.Color   = _LayoutEngine.getSequence(os.clock())
-            _cvGrad.Color  = _LayoutEngine.getSequence(os.clock() + 0.5)
-            _rowGrad.Color = _LayoutEngine.getSequence(os.clock())
-        end)
-    end)
 end
 
 -- Key rebind control
@@ -2579,8 +2432,8 @@ function _LayoutEngine.makeRebind(_pi, _text, _cfgKey, _cfg, _connections)
 
     local _row = Instance.new("Frame")
     _row.Size                  = UDim2.new(1, -4, 0, 36)
-    _row.BackgroundColor3      = Color3.new(1, 1, 1)
-    _row.BackgroundTransparency = 0.85
+    _row.BackgroundColor3      = Color3.fromRGB(25, 25, 25)
+    _row.BackgroundTransparency = 0.15
     _row.BorderSizePixel       = 0
     _row.ZIndex                = 18
     _row.LayoutOrder           = _nextOrder(_pi)
@@ -2588,15 +2441,6 @@ function _LayoutEngine.makeRebind(_pi, _text, _cfgKey, _cfg, _connections)
     _row.Parent                = _tabPages[_pi]
 
     Instance.new("UICorner", _row).CornerRadius = UDim.new(0, 8)
-
-    local _rowGrad = Instance.new("UIGradient")
-    _rowGrad.Color    = _LayoutEngine.getSequence(os.clock())
-    _rowGrad.Rotation = 20
-    _rowGrad.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.65),
-        NumberSequenceKeypoint.new(1, 0.45)
-    })
-    _rowGrad.Parent = _row
 
     local _lbl = Instance.new("TextLabel")
     _lbl.Text                  = _text
@@ -2689,13 +2533,6 @@ function _LayoutEngine.makeRebind(_pi, _text, _cfgKey, _cfg, _connections)
         end)
     end)
 
-    table.insert(_LayoutEngine.themeCallbacks, function()
-        pcall(function()
-            _rGrad.Color   = _LayoutEngine.getSequence(os.clock())
-            _rvGrad.Color  = _LayoutEngine.getSequence(os.clock() + 0.5)
-            _rowGrad.Color = _LayoutEngine.getSequence(os.clock())
-        end)
-    end)
 end
 
 -- Static info text line
@@ -2726,13 +2563,9 @@ function _LayoutEngine.makeInfo(_pi, _text)
     })
     _iGrad.Parent = _lbl
 
-    table.insert(_LayoutEngine.themeCallbacks, function()
-        pcall(function() _iGrad.Color = _LayoutEngine.getSequence(os.clock()) end)
-    end)
 end
 
 -- Dynamic label (returns reference for external text updates)
-function _LayoutEngine.makeLabel(_pi)
     local _lbl = Instance.new("TextLabel")
     _lbl.Text                  = ""
     _lbl.Size                  = UDim2.new(1, -8, 0, 16)
@@ -2755,10 +2588,6 @@ function _LayoutEngine.makeLabel(_pi)
     _lGrad.Color  = _LayoutEngine.getSequence(os.clock())
     _lGrad.Parent = _lbl
 
-    table.insert(_LayoutEngine.themeCallbacks, function()
-        pcall(function() _lGrad.Color = _LayoutEngine.getSequence(os.clock()) end)
-    end)
-
     return _lbl
 end
 
@@ -2766,8 +2595,8 @@ end
 function _LayoutEngine.makeButton(_pi, _text, _handler)
     local _row = Instance.new("Frame")
     _row.Size                  = UDim2.new(1, -4, 0, 36)
-    _row.BackgroundColor3      = Color3.new(1, 1, 1)
-    _row.BackgroundTransparency = 0.85
+    _row.BackgroundColor3      = Color3.fromRGB(25, 25, 25)
+    _row.BackgroundTransparency = 0.15
     _row.BorderSizePixel       = 0
     _row.ZIndex                = 18
     _row.LayoutOrder           = _nextOrder(_pi)
@@ -2828,12 +2657,6 @@ function _LayoutEngine.makeButton(_pi, _text, _handler)
         if _handler then _handler() end
     end)
 
-    table.insert(_LayoutEngine.themeCallbacks, function()
-        pcall(function()
-            _bGrad2.Color  = _LayoutEngine.getSequence(os.clock())
-            _rowGrad.Color = _LayoutEngine.getSequence(os.clock())
-        end)
-    end)
 end
 
 -- ═══════════════════════════════════════════════════════
@@ -3020,7 +2843,7 @@ function _Renderer.createFOVCircle()
     local _ok, _circle = pcall(function()
         local _c = Drawing.new("Circle")
         _c.Thickness    = 1.5
-        _c.NumSides     = 128
+        _c.NumSides     = 360
         _c.Radius       = 100
         _c.Filled       = false
         _c.Visible      = false
@@ -3061,7 +2884,7 @@ function _Renderer.updateFOVCircle(_prefs, _forceHide)
 
     _circle.Position     = Vector2.new(_centerX, _centerY)
     _circle.Radius       = _radius
-    _circle.NumSides     = 128
+    _circle.NumSides     = 360
     _circle.Thickness    = _prefs.FOVThickness or 1.5
     _circle.Transparency = _prefs.FOVTransparency or 0.8
 
@@ -3951,30 +3774,6 @@ end
 function _Renderer.buildUITab(_prefs, _connections)
     local _pageIdx = 5
 
-    _Renderer.makeSection(_pageIdx, "THEME")
-    _Renderer.makeCycle(_pageIdx, "Theme Mode",
-        {"Aurora", "Moon", "Classic", "Custom", "Clean"},
-        "ThemeMode", _Renderer.UIConfigs,
-        function(_idx)
-            _Renderer.UIConfigs.ThemeMode = _idx
-        end
-    )
-    _Renderer.makeToggle(_pageIdx, "Gradients", "GradientEnabled", _Renderer.UIConfigs, function() end)
-
-    _Renderer.makeSection(_pageIdx, "COLORS")
-    _Renderer.makeSlider(_pageIdx, "Color Speed",      "ColorSpeed",       0.05, 2,   0.05, _Renderer.UIConfigs, _connections)
-    _Renderer.makeSlider(_pageIdx, "Intensity",         "ColorIntensity",   0.1,  2,   0.1,  _Renderer.UIConfigs, _connections)
-    _Renderer.makeSlider(_pageIdx, "UI Transparency",   "UITransparency",   0,    0.9, 0.05, _Renderer.UIConfigs, _connections)
-    _Renderer.makeSlider(_pageIdx, "Stroke Opacity",    "StrokeTransparency", 0,  1,   0.05, _Renderer.UIConfigs, _connections)
-
-    _Renderer.makeSection(_pageIdx, "ANIMATION")
-    _Renderer.makeToggle(_pageIdx, "Animate Background", "BackgroundAnimate", _Renderer.UIConfigs)
-    _Renderer.makeToggle(_pageIdx, "Animate Top Bar",    "TopBarAnimate",     _Renderer.UIConfigs)
-    _Renderer.makeCycle(_pageIdx, "Button Mode",
-        {"Glow", "Gradient", "Hover", "Pulse"},
-        "ButtonMode", _Renderer.UIConfigs
-    )
-
     _Renderer.makeSection(_pageIdx, "CONFIG")
 
     local _statusLabel = _Renderer.makeLabel(_pageIdx)
@@ -4008,61 +3807,10 @@ function _Renderer.buildUITab(_prefs, _connections)
         end
     end)
 
-    -- Theme profile management
-    _Renderer.makeSection(_pageIdx, "THEME PROFILES")
-
-    local _profileStatus = _Renderer.makeLabel(_pageIdx)
-    _profileStatus.TextSize = 9
-    _profileStatus.Text     = "Select or create profile"
-
-    local _profileNames = {}
-    for _key, _prof in pairs(_Renderer.ThemeProfiles) do
-        _profileNames[#_profileNames + 1] = _prof.Name or _key
-    end
-    table.sort(_profileNames)
-
-    _Renderer.makeCycle(_pageIdx, "Active Profile", _profileNames,
-        "_ActiveThemeProfile", _Renderer,
-        function(_idx)
-            local _name = _profileNames[_idx]
-            if not _name then return end
-
-            -- Find internal key matching the display name
-            local _internalKey = nil
-            for _key, _prof in pairs(_Renderer.ThemeProfiles) do
-                if (_prof.Name or _key) == _name then
-                    _internalKey = _key
-                    break
-                end
-            end
-
-            if _internalKey and _Renderer.ApplyThemeProfile(_internalKey) then
-                _profileStatus.Text = "Applied: " .. _name
-                _Renderer.SaveThemeProfiles()
-            end
-        end
-    )
-
-    _Renderer.makeButton(_pageIdx, "Save Current as Profile", function()
-        local _baseName = "Custom " .. os.date("%H:%M:%S")
-        _Renderer.CreateThemeProfile(_baseName)
-        _profileStatus.Text = "Saved profile: " .. _baseName
-        _Renderer.SaveThemeProfiles()
-    end)
-
-    _Renderer.makeButton(_pageIdx, "Reset to Aurora Default", function()
-        if _Renderer.ApplyThemeProfile("AuroraDefault") then
-            _profileStatus.Text = "Reset to Aurora Default"
-            _Renderer.SaveThemeProfiles()
-        end
-    end)
-
     _Renderer.makeSection(_pageIdx, "INFO")
-    _Renderer.makeInfo(_pageIdx, "MOON v3.5 — 5 themes available")
-    _Renderer.makeInfo(_pageIdx, "Aurora / Moon / Classic / Custom / Clean")
-    _Renderer.makeInfo(_pageIdx, "Clean = no gradients, solid colors")
-    _Renderer.makeInfo(_pageIdx, "Intensity changes color brightness")
-    _Renderer.makeInfo(_pageIdx, "UI Transparency changes window opacity")
+    _Renderer.makeInfo(_pageIdx, "MOON v4.0 — Classic clean UI")
+    _Renderer.makeInfo(_pageIdx, "Black background, Red accents, Yellow branding")
+    _Renderer.makeInfo(_pageIdx, "No gradients, no blur, no effects")
 end
 
 -- ═══════════════════════════════════════════════════════
@@ -4073,29 +3821,22 @@ end
 function _Renderer.buildPatchTab()
     local _pageIdx = 7
 
-    _Renderer.makeSection(_pageIdx, "PATCH NOTES v3.5")
-    _Renderer.makeInfo(_pageIdx, "• 5 theme modes (Aurora/Moon/Classic/Custom/Clean)")
-    _Renderer.makeInfo(_pageIdx, "• Gradient toggle — disable all gradients")
-    _Renderer.makeInfo(_pageIdx, "• Color Intensity actually changes brightness")
-    _Renderer.makeInfo(_pageIdx, "• UI Transparency changes window opacity")
-    _Renderer.makeInfo(_pageIdx, "• Color Speed controls animation speed")
-    _Renderer.makeInfo(_pageIdx, "• Stroke Opacity controls text outline")
-    _Renderer.makeInfo(_pageIdx, "• Background/TopBar animate toggles")
-    _Renderer.makeInfo(_pageIdx, "• Clean mode = no effects at all")
-    _Renderer.makeInfo(_pageIdx, "• FOV circle perfectly round")
+    _Renderer.makeSection(_pageIdx, "PATCH NOTES v4.0")
+    _Renderer.makeInfo(_pageIdx, "• v4.0 — Clean release build")
+    _Renderer.makeInfo(_pageIdx, "• Fixed colors: black bg, red accents, yellow brand")
+    _Renderer.makeInfo(_pageIdx, "• No gradients, no blur, no effects")
+    _Renderer.makeInfo(_pageIdx, "• Binds panel flicker fixed")
+    _Renderer.makeInfo(_pageIdx, "• FOV circle perfectly smooth (360 sides)")
+    _Renderer.makeInfo(_pageIdx, "• Simplified UI for performance")
     _Renderer.makeInfo(_pageIdx, "• Kill counter fixed (no false kills)")
     _Renderer.makeInfo(_pageIdx, "• Rage Spin with 3rd person")
     _Renderer.makeInfo(_pageIdx, "• ESP uses Color Engine")
     _Renderer.makeInfo(_pageIdx, "• Config system Base64 export/import")
-    _Renderer.makeInfo(_pageIdx, "• Text stroke on everything for readability")
     _Renderer.makeInfo(_pageIdx, "• UI sounds on all interactions")
-    _Renderer.makeInfo(_pageIdx, "• Animated binds panel")
-    _Renderer.makeInfo(_pageIdx, "• Moon crescent overlay")
-    _Renderer.makeInfo(_pageIdx, "• Chams with Color Engine")
     _Renderer.makeInfo(_pageIdx, "• X button fully destroys GUI")
 
     _Renderer.makeSection(_pageIdx, "CREDITS")
-    _Renderer.makeInfo(_pageIdx, "MOON v3.5 by dev team")
+    _Renderer.makeInfo(_pageIdx, "MOON v4.0 by dev team")
 end
 
 -- ═══════════════════════════════════════════════════════
@@ -4146,171 +3887,12 @@ function _Renderer.startUpdateLoop()
             end)
         end
 
-        -- ── Color Sequences ──
-        local _seq   = _Renderer.getSequence(_t)
-        local _stSeq = _Renderer.getStrokeSequence(_t)
-
-        -- ── Throttled Gradient Sweep ──
-        -- Updates all UIGradient descendants across both GUI trees.
-        -- Throttled to ~12 Hz to balance visual smoothness with CPU cost.
-        if (_t - (_Renderer._lastGradientSweep or 0)) >= 0.08 then
-            _Renderer._lastGradientSweep = _t
-
-            local _themePrefs  = _Renderer.UIConfigs
-            local _isMinimal   = _themePrefs.ThemeMode == 5
-            local _solidText   = ColorSequence.new(Color3.fromRGB(210, 215, 230))
-            local _solidAccent = ColorSequence.new(Color3.fromRGB(90, 130, 220))
-            local _solidStroke = ColorSequence.new(Color3.fromRGB(55, 60, 80))
-            local _flatTrans   = NumberSequence.new(0)
-
-            local function _sweepGradients(_root)
-                if not _root then return end
-                for _, _desc in ipairs(_root:GetDescendants()) do
-                    if _desc:IsA("UIGradient") then
-                        if _isMinimal then
-                            _desc.Transparency = _flatTrans
-                            if _desc.Parent and _desc.Parent:IsA("UIStroke") then
-                                _desc.Color = _solidStroke
-                            elseif _desc.Parent and (_desc.Parent:IsA("TextLabel") or _desc.Parent:IsA("TextButton")) then
-                                _desc.Color = _solidText
-                            else
-                                _desc.Color = _solidAccent
-                            end
-                        else
-                            -- Keep existing transparency, just update color
-                            _desc.Transparency = _desc.Transparency
-                            if _desc.Parent and _desc.Parent:IsA("UIStroke") then
-                                _desc.Color = _stSeq
-                            else
-                                _desc.Color = _seq
-                            end
-                        end
-                    end
-                end
-            end
-
-            pcall(function()
-                _sweepGradients(_Renderer.gui)
-                _sweepGradients(_Renderer.screenGui)
-            end)
-        end
-
         -- ── Window Transparency ──
-        local _uiAlpha = _Renderer.UIConfigs.UITransparency or 0.15
         pcall(function()
             if _Renderer.W then
-                _Renderer.W.BackgroundTransparency = 0.08 + _uiAlpha * 0.5
+                _Renderer.W.BackgroundTransparency = 0.05
             end
         end)
-
-        -- ── Watermark Gradient Updates ──
-        pcall(function()
-            if _Renderer._wmGrad      then _Renderer._wmGrad.Color      = _seq end
-            if _Renderer._wmStGrad    then _Renderer._wmStGrad.Color    = _seq end
-            if _Renderer._wmTitleGrad then _Renderer._wmTitleGrad.Color = _seq end
-            if _Renderer._wmTimeGrad  then _Renderer._wmTimeGrad.Color  = _seq end
-        end)
-
-        -- ── Window Stroke & Indicators ──
-        pcall(function()
-            if _Renderer._gStGrad    then _Renderer._gStGrad.Color    = _seq end
-            if _Renderer._tabIndGrad then _Renderer._tabIndGrad.Color = _seq end
-            if _Renderer._tLGrad     then _Renderer._tLGrad.Color     = _seq end
-        end)
-
-        -- ── Conditional Background Animation ──
-        pcall(function()
-            if _Renderer.UIConfigs.BackgroundAnimate then
-                if _Renderer._mainGrad then _Renderer._mainGrad.Color = _seq end
-            end
-            if _Renderer.UIConfigs.TopBarAnimate then
-                if _Renderer._titleBarGrad then _Renderer._titleBarGrad.Color = _seq end
-                if _Renderer._tabBarGrad   then _Renderer._tabBarGrad.Color   = _seq end
-            end
-        end)
-
-        -- ── Metric Label Gradients ──
-        pcall(function()
-            if _Renderer._fpsGrad    then _Renderer._fpsGrad.Color    = _seq end
-            if _Renderer._killsGrad  then _Renderer._killsGrad.Color  = _seq end
-            if _Renderer._pingGrad   then _Renderer._pingGrad.Color   = _seq end
-            if _Renderer._statusGrad then _Renderer._statusGrad.Color = _seq end
-        end)
-
-        -- ── Header Button Gradients ──
-        pcall(function()
-            if _Renderer._moonBtnGrad    then _Renderer._moonBtnGrad.Color    = _seq end
-            if _Renderer._moonBtnTxtGrad then _Renderer._moonBtnTxtGrad.Color = _seq end
-            if _Renderer._closeBtnG      then _Renderer._closeBtnG.Color      = _seq end
-            if _Renderer._minBtnG        then _Renderer._minBtnG.Color        = _seq end
-        end)
-
-        -- ── Keybind Panel Gradients ──
-        pcall(function()
-            if _Renderer._bindsGrad      then _Renderer._bindsGrad.Color      = _seq end
-            if _Renderer._bfStGrad       then _Renderer._bfStGrad.Color       = _seq end
-            if _Renderer._bindsTitleGrad then _Renderer._bindsTitleGrad.Color = _seq end
-        end)
-
-        -- ── HUD Panel Gradients ──
-        pcall(function()
-            if _Renderer._hudGrad   then _Renderer._hudGrad.Color   = _seq end
-            if _Renderer._hudStGrad then _Renderer._hudStGrad.Color = _seq end
-        end)
-
-        -- ── Crescent Gradient ──
-        pcall(function()
-            if _Renderer._moonOuterGrad then _Renderer._moonOuterGrad.Color = _seq end
-        end)
-
-        -- ── Background Overlay Gradient ──
-        pcall(function()
-            if _Renderer._fullAuroraGrad then _Renderer._fullAuroraGrad.Color = _seq end
-        end)
-
-        -- ── Enhanced Mode Overlay Pulsing ──
-        pcall(function()
-            if _Renderer._rageOverlay and _Renderer.isRageMode then
-                local _pulseSeq = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0, Color3.fromRGB(
-                        255,
-                        math.floor(60 + math.sin(_t * 2) * 30),
-                        math.floor(90 + math.cos(_t * 1.5) * 40)
-                    )),
-                    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(
-                        math.floor(180 + math.sin(_t * 1.7) * 40),
-                        50,
-                        math.floor(150 + math.cos(_t * 2.1) * 50)
-                    )),
-                    ColorSequenceKeypoint.new(1, Color3.fromRGB(
-                        255,
-                        math.floor(120 + math.sin(_t * 2.5) * 60),
-                        math.floor(120 + math.cos(_t * 1.3) * 50)
-                    ))
-                })
-                local _overlayGrad = _Renderer._rageOverlay:FindFirstChildOfClass("UIGradient")
-                if _overlayGrad then
-                    _overlayGrad.Color    = _pulseSeq
-                    _overlayGrad.Rotation = 45 + math.sin(_t * 0.5) * 30
-                end
-            end
-        end)
-
-        -- ── Star Twinkle Animation ──
-        pcall(function()
-            if _Renderer.guiStars then
-                for _i, _star in ipairs(_Renderer.guiStars) do
-                    if _star and _star.Parent then
-                        _star.BackgroundTransparency = 0.5 + 0.3 * math.sin(_t * (1.2 + _i * 0.15) + _i)
-                    end
-                end
-            end
-        end)
-
-        -- ── Theme Callback Dispatch ──
-        for _, _cb in ipairs(_Renderer.themeCallbacks) do
-            pcall(_cb)
-        end
     end)
 end
 
@@ -4421,7 +4003,7 @@ function _Renderer.init(_prefs, _connections)
 
     -- Welcome notification (delayed to appear after splash)
     task.delay(2.5, function()
-        _Renderer.Notify("MOON", "v3.5 loaded successfully", 4)
+        _Renderer.Notify("MOON", "v4.0 loaded successfully", 4)
     end)
 end
 
