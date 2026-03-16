@@ -1703,7 +1703,7 @@ function Visual.buildUITab(CFG, allConnections)
     Visual.makeCycle(pi, "Theme Mode", {"Aurora", "Moon", "Classic", "Custom", "Clean"}, "ThemeMode", Visual.UIConfigs, function(idx)
         Visual.UIConfigs.ThemeMode = idx
     end)
-    Visual.makeToggle(pi, "Gradients", "GradientEnabled", Visual.UIConfigs)
+    Visual.makeToggle(pi, "Gradients", "GradientEnabled", Visual.UIConfigs, function() end)
 
     Visual.makeSection(pi, "COLORS")
     Visual.makeSlider(pi, "Color Speed", "ColorSpeed", 0.05, 2, 0.05, Visual.UIConfigs, allConnections)
