@@ -1417,6 +1417,166 @@ local UI_CONFIG_KEYS = {
     "StrokeTransparency", "GradientEnabled"
 }
 
+-- ═══ THEME PROFILES ═══
+Visual.ThemeProfiles = Visual.ThemeProfiles or {
+    AuroraDefault = {
+        Name = "Aurora Default",
+        UI = {
+            ThemeMode = 1,
+            ColorSpeed = 0.35,
+            ColorIntensity = 1.1,
+            UITransparency = 0.18,
+            BackgroundAnimate = true,
+            TopBarAnimate = true,
+            ButtonMode = 2,
+            StrokeTransparency = 0.15,
+            GradientEnabled = true,
+            CustomColors = {
+                Color3.fromRGB(180, 190, 255),
+                Color3.fromRGB(120, 150, 255),
+                Color3.fromRGB(80, 90, 130)
+            }
+        }
+    },
+    CleanMinimal = {
+        Name = "Clean Minimal",
+        UI = {
+            ThemeMode = 5,
+            ColorSpeed = 0.1,
+            ColorIntensity = 0.9,
+            UITransparency = 0.25,
+            BackgroundAnimate = false,
+            TopBarAnimate = false,
+            ButtonMode = 1,
+            StrokeTransparency = 0,
+            GradientEnabled = false,
+            CustomColors = {
+                Color3.fromRGB(210, 210, 220),
+                Color3.fromRGB(190, 190, 200)
+            }
+        }
+    },
+    ClassicSoft = {
+        Name = "Classic Soft",
+        UI = {
+            ThemeMode = 3,
+            ColorSpeed = 0.2,
+            ColorIntensity = 1.0,
+            UITransparency = 0.12,
+            BackgroundAnimate = true,
+            TopBarAnimate = false,
+            ButtonMode = 3,
+            StrokeTransparency = 0.2,
+            GradientEnabled = true,
+            CustomColors = {
+                Color3.fromRGB(220, 225, 255),
+                Color3.fromRGB(200, 210, 255)
+            }
+        }
+    }
+}
+
+local THEME_PROFILE_FILE = "MoonTheme_v35.json"
+
+local function applyUIConfig(uiTable)
+    if not uiTable then return end
+    for _, key in ipairs(UI_CONFIG_KEYS) do
+        if uiTable[key] ~= nil then
+            Visual.UIConfigs[key] = uiTable[key]
+        end
+    end
+    if uiTable.CustomColors and type(uiTable.CustomColors) == "table" then
+        Visual.UIConfigs.CustomColors = {}
+        for i, col in ipairs(uiTable.CustomColors) do
+            if typeof(col) == "Color3" then
+                Visual.UIConfigs.CustomColors[i] = col
+            elseif type(col) == "table" and col[1] and col[2] and col[3] then
+                Visual.UIConfigs.CustomColors[i] = Color3.fromRGB(col[1], col[2], col[3])
+            end
+        end
+    end
+end
+
+function Visual.LoadThemeProfiles()
+    pcall(function()
+        if readfile and isfile and isfile(THEME_PROFILE_FILE) then
+            local raw = readfile(THEME_PROFILE_FILE)
+            local ok, data = pcall(function()
+                return HttpService:JSONDecode(raw)
+            end)
+            if ok and type(data) == "table" then
+                for name, prof in pairs(data) do
+                    if type(prof) == "table" and type(name) == "string" then
+                        Visual.ThemeProfiles[name] = prof
+                    end
+                end
+            end
+        end
+    end)
+end
+
+function Visual.SaveThemeProfiles()
+    pcall(function()
+        if writefile then
+            local safe = {}
+            for name, prof in pairs(Visual.ThemeProfiles) do
+                if type(prof) == "table" and prof.UI then
+                    safe[name] = {Name = prof.Name or name, UI = {}}
+                    for _, key in ipairs(UI_CONFIG_KEYS) do
+                        safe[name].UI[key] = prof.UI[key] ~= nil and prof.UI[key] or Visual.UIConfigs[key]
+                    end
+                    if prof.UI.CustomColors and type(prof.UI.CustomColors) == "table" then
+                        safe[name].UI.CustomColors = {}
+                        for i, col in ipairs(prof.UI.CustomColors) do
+                            if typeof(col) == "Color3" then
+                                safe[name].UI.CustomColors[i] = {
+                                    math.floor(col.R * 255),
+                                    math.floor(col.G * 255),
+                                    math.floor(col.B * 255)
+                                }
+                            elseif type(col) == "table" and col[1] and col[2] and col[3] then
+                                safe[name].UI.CustomColors[i] = {col[1], col[2], col[3]}
+                            end
+                        end
+                    end
+                end
+            end
+            writefile(THEME_PROFILE_FILE, HttpService:JSONEncode(safe))
+        end
+    end)
+end
+
+function Visual.ApplyThemeProfile(name)
+    local prof = Visual.ThemeProfiles[name]
+    if not prof or not prof.UI then return false end
+    applyUIConfig(prof.UI)
+    if Visual.screenGui then
+        for _, cb in ipairs(Visual.themeCallbacks) do
+            pcall(cb)
+        end
+    end
+    return true
+end
+
+function Visual.CreateThemeProfile(name)
+    if not name or name == "" then return end
+    local ui = {}
+    for _, key in ipairs(UI_CONFIG_KEYS) do
+        ui[key] = Visual.UIConfigs[key]
+    end
+    if Visual.UIConfigs.CustomColors then
+        ui.CustomColors = {}
+        for i, col in ipairs(Visual.UIConfigs.CustomColors) do
+            ui.CustomColors[i] = col
+        end
+    end
+    Visual.ThemeProfiles[name] = {
+        Name = name,
+        UI = ui
+    }
+    Visual.SaveThemeProfiles()
+end
+
 function Visual.ConfigSystem.Export(CFG)
     local data = {}
     for _, key in ipairs(CONFIG_KEYS) do
@@ -1583,6 +1743,47 @@ function Visual.buildUITab(CFG, allConnections)
             Visual.Notify("Config", "Config loaded!", 3)
         else
             Visual.Notify("Config", "No config file found", 3, Color3.fromRGB(255, 100, 100))
+        end
+    end)
+
+    Visual.makeSection(pi, "THEME PROFILES")
+    local profileLabel = Visual.makeLabel(pi)
+    profileLabel.TextSize = 9
+    profileLabel.Text = "Select or create profile"
+
+    local profileNames = {}
+    for key, prof in pairs(Visual.ThemeProfiles) do
+        profileNames[#profileNames + 1] = prof.Name or key
+    end
+    table.sort(profileNames)
+
+    Visual.makeCycle(pi, "Active Profile", profileNames, "_ActiveThemeProfile", Visual, function(idx)
+        local name = profileNames[idx]
+        if not name then return end
+        local internalKey = nil
+        for key, prof in pairs(Visual.ThemeProfiles) do
+            if (prof.Name or key) == name then
+                internalKey = key
+                break
+            end
+        end
+        if internalKey and Visual.ApplyThemeProfile(internalKey) then
+            profileLabel.Text = "Applied: " .. name
+            Visual.SaveThemeProfiles()
+        end
+    end)
+
+    Visual.makeButton(pi, "Save Current as Profile", function()
+        local baseName = "Custom " .. os.date("%H:%M:%S")
+        Visual.CreateThemeProfile(baseName)
+        profileLabel.Text = "Saved profile: " .. baseName
+        Visual.SaveThemeProfiles()
+    end)
+
+    Visual.makeButton(pi, "Reset to Aurora Default", function()
+        if Visual.ApplyThemeProfile("AuroraDefault") then
+            profileLabel.Text = "Reset to Aurora Default"
+            Visual.SaveThemeProfiles()
         end
     end)
 
