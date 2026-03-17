@@ -1792,7 +1792,7 @@ _tabContent.Parent                = _contentBody
 
 -- Tab page definitions
 _LayoutEngine.NormalTabs = {"Combat", "Visual", "Binds", "UI", "Cfg", "Patch"}
-_LayoutEngine.RageTabs   = {"Combat", "Visual", "Target", "Binds", "UI", "Cfg", "Patch"}
+_LayoutEngine.RageTabs   = {"Combat", "Visual", "Movement", "Binds", "UI", "Cfg", "Patch"}
 
 local _tabButtons, _tabPages, _pageOrders = {}, {}, {}
 local _activeTab, _currentTabs = 1, {}
