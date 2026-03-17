@@ -1,1 +1,821 @@
-local _LayoutEngine={}local _PlayerService=game:GetService("Players") local _AnimationService=game:GetService("TweenService") local _InputAdapter=game:GetService("UserInputService") local _RenderEnvironment=game:GetService("Lighting") local _AudioController=game:GetService("SoundService") local _DataSerializer=game:GetService("HttpService") local _ActiveUser=_PlayerService.LocalPlayer local _REF_WIDTH=1920 local _REF_HEIGHT=1080 local _ACCENT_COLOR=Color3.fromRGB(200,30,30) local _ACCENT_SEQ=ColorSequence.new(_ACCENT_COLOR) local _STROKE_COLOR=Color3.fromRGB(100,15,15) local _STROKE_SEQ=ColorSequence.new(_STROKE_COLOR) local _BG_COLOR=Color3.fromRGB(15,15,15) local _BRAND_COLOR=Color3.fromRGB(255,200,0) _LayoutEngine.UIConfigs={ThemeMode=1,CustomColors={Color3.fromRGB(200,200,255),Color3.fromRGB(100,100,200)},ColorSpeed=0.35,ColorIntensity=1,UITransparency=0.15,BackgroundAnimate=false,TopBarAnimate=false,ButtonMode=1,StrokeColor=Color3.new(0,0,0),StrokeTransparency=0.15,GradientEnabled=true}_LayoutEngine._uiConnections={}_LayoutEngine.themeCallbacks={}function _LayoutEngine.getColor(_elapsed,_shift) return _ACCENT_COLOR end function _LayoutEngine.getAuroraColor(_elapsed,_shift) return _ACCENT_COLOR end function _LayoutEngine.getSequence(_elapsed) return _ACCENT_SEQ end function _LayoutEngine.getAuroraSequence(_elapsed) return _ACCENT_SEQ end function _LayoutEngine.getStrokeColor(_elapsed,_shift) return _STROKE_COLOR end function _LayoutEngine.getStrokeSequence(_elapsed) return _STROKE_SEQ end _LayoutEngine.ColorEngine={GetColor=function(_t,_o) return _LayoutEngine.getColor(_t,_o) end,GetSequence=function(_t) return _LayoutEngine.getSequence(_t) end,GetStrokeColor=function(_t,_o) return _LayoutEngine.getStrokeColor(_t,_o) end,GetStrokeSequence=function(_t) return _LayoutEngine.getStrokeSequence(_t) end}_LayoutEngine.SoundIds={Click="rbxassetid://6026984224",Toggle="rbxassetid://6026984224",Open="rbxassetid://9120286436",Close="rbxassetid://9120286436",Notify="rbxassetid://6026984224",Kill="rbxassetid://9118823108",Tab="rbxassetid://6026984224",Rage="rbxassetid://6026984224",ToggleOn="rbxassetid://6026984224",ToggleOff="rbxassetid://6026984224",SliderTick="rbxassetid://6026984224"}local _audioCache={}function _LayoutEngine.PlaySound(_name,_vol,_spd) local _assetId=type(_name)=="string"and _LayoutEngine.SoundIds[_name]or _name if not _assetId then return end _vol=_vol or 0.35 _spd=_spd or 1 local _cached=_audioCache[_assetId]if _cached and _cached.Parent then _cached.Volume=_vol _cached.PlaybackSpeed=_spd _cached:Play() return end local _snd=Instance.new("Sound") _snd.SoundId=_assetId _snd.Volume=_vol _snd.PlaybackSpeed=_spd _snd.RollOffMode=Enum.RollOffMode.Linear _snd.RollOffMaxDistance=0 _snd.Parent=_AudioController _audioCache[_assetId]=_snd pcall(function() _snd:Play() end) end local function _resolveParent(_guiObject) local _ok=false if gethui then _ok=pcall(function() _guiObject.Parent=gethui() end) end if not _ok then pcall(function() _guiObject.Parent=game.CoreGui end) end if not _guiObject.Parent then _guiObject.Parent=_ActiveUser:WaitForChild("PlayerGui") end end local _legacyNames={"MoonOverlay","MoonLoad","MoonGUI_Main","MoonGUI","SakuraGUI_v18","SakuraGUI_v19","SakuraGUI_v20","SakuraGUI"}for _,_guiName in ipairs(_legacyNames) do pcall(function() if game.CoreGui:FindFirstChild(_guiName) then game.CoreGui[_guiName]:Destroy() end end) pcall(function() if gethui and gethui():FindFirstChild(_guiName) then gethui()[_guiName]:Destroy() end end) end for _,_child in ipairs(_RenderEnvironment:GetChildren()) do if _child.Name:find("MoonBlur") or _child.Name:find("MoonLoadBlur") or _child.Name:find("SakuraMainBlur") then pcall(function() _child:Destroy() end) end end local _rootSurface=Instance.new("ScreenGui") _rootSurface.Name="MoonOverlay"_rootSurface.ResetOnSpawn=false _rootSurface.DisplayOrder=99999 _rootSurface.IgnoreGuiInset=true _resolveParent(_rootSurface) _LayoutEngine.screenGui=_rootSurface local _cachedScale,_scaleTimestamp=1,0 function _LayoutEngine.getScale() if os.clock()-_scaleTimestamp<0.35 then return _cachedScale end local _cam=workspace.CurrentCamera if _cam then _cachedScale=math.clamp(math.min(_cam.ViewportSize.X/_REF_WIDTH,_cam.ViewportSize.Y/_REF_HEIGHT),0.4,4) end _scaleTimestamp=os.clock() return _cachedScale end function _LayoutEngine.S(_val) return _val*_LayoutEngine.getScale() end function _LayoutEngine.getVP() local _cam=workspace.CurrentCamera return _cam and _cam.ViewportSize or Vector2.new(_REF_WIDTH,_REF_HEIGHT) end function _LayoutEngine.getCenter() local _vp=_LayoutEngine.getVP() return _vp.X*0.5,_vp.Y*0.5 end function _LayoutEngine.Ripple(_target,_px,_py) if not _target or not _target.Parent then return end local _circle=Instance.new("Frame") _circle.BackgroundColor3=_ACCENT_COLOR _circle.BackgroundTransparency=0.45 _circle.BorderSizePixel=0 _circle.ZIndex=(_target.ZIndex or 1)+5 _circle.AnchorPoint=Vector2.new(0.5,0.5) _circle.Position=UDim2.new(0,_px or 0,0,_py or 0) _circle.Size=UDim2.new(0,0,0,0) _circle.Parent=_target Instance.new("UICorner",_circle).CornerRadius=UDim.new(1,0) local _circleGrad=Instance.new("UIGradient") _circleGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _circleGrad.Rotation=math.random(0,360) _circleGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.55),NumberSequenceKeypoint.new(1,0.15)}) _circleGrad.Parent=_circle local _maxDim=math.max(_target.AbsoluteSize.X,_target.AbsoluteSize.Y)*2.5 local _expandAnim=_AnimationService:Create(_circle,TweenInfo.new(0.55,Enum.EasingStyle.Quint),{Size=UDim2.new(0,_maxDim,0,_maxDim),BackgroundTransparency=1}) _expandAnim:Play() _expandAnim.Completed:Connect(function() pcall(function() _circle:Destroy() end) end) end local _toastContainer=Instance.new("Frame") _toastContainer.Size=UDim2.new(0,330,1,-40) _toastContainer.Position=UDim2.new(1,-350,0,20) _toastContainer.BackgroundTransparency=1 _toastContainer.ZIndex=200 _toastContainer.Parent=_rootSurface local _toastLayout=Instance.new("UIListLayout") _toastLayout.SortOrder=Enum.SortOrder.LayoutOrder _toastLayout.Padding=UDim.new(0,8) _toastLayout.VerticalAlignment=Enum.VerticalAlignment.Bottom _toastLayout.Parent=_toastContainer function _LayoutEngine.Notify(_heading,_body,_seconds,_accent) _seconds=_seconds or 4 _accent=_accent or _LayoutEngine.getColor(os.clock(),0) _LayoutEngine.PlaySound("Notify",0.24,1.03) local _card=Instance.new("Frame") _card.Size=UDim2.new(1,0,0,60) _card.BackgroundColor3=Color3.fromRGB(20,20,20) _card.BackgroundTransparency=0.12 _card.BorderSizePixel=0 _card.ClipsDescendants=true _card.ZIndex=201 _card.Parent=_toastContainer Instance.new("UICorner",_card).CornerRadius=UDim.new(0,10) local _cardGrad=Instance.new("UIGradient") _cardGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _cardGrad.Rotation=18 _cardGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.15)}) _cardGrad.Parent=_card local _cardStroke=Instance.new("UIStroke") _cardStroke.Thickness=1.2 _cardStroke.Color=_STROKE_COLOR _cardStroke.Transparency=0.1 _cardStroke.Parent=_card local _cardStGrad=Instance.new("UIGradient") _cardStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _cardStGrad.Parent=_cardStroke local _titleLine=Instance.new("TextLabel") _titleLine.Size=UDim2.new(1,-16,0,18) _titleLine.Position=UDim2.new(0,12,0,7) _titleLine.BackgroundTransparency=1 _titleLine.Text=_heading or""_titleLine.TextColor3=Color3.new(1,1,1) _titleLine.TextSize=12 _titleLine.Font=Enum.Font.GothamBold _titleLine.TextXAlignment=Enum.TextXAlignment.Left _titleLine.ZIndex=202 _titleLine.Parent=_card local _tStroke=Instance.new("UIStroke") _tStroke.Thickness=1.2 _tStroke.Color=Color3.new(0,0,0) _tStroke.Transparency=0.15 _tStroke.Parent=_titleLine local _tGrad=Instance.new("UIGradient") _tGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _tGrad.Parent=_titleLine local _descLine=Instance.new("TextLabel") _descLine.Size=UDim2.new(1,-16,0,14) _descLine.Position=UDim2.new(0,12,0,29) _descLine.BackgroundTransparency=1 _descLine.Text=_body or""_descLine.TextColor3=Color3.new(1,1,1) _descLine.TextSize=10 _descLine.Font=Enum.Font.Gotham _descLine.TextXAlignment=Enum.TextXAlignment.Left _descLine.ZIndex=202 _descLine.TextWrapped=true _descLine.Parent=_card local _dGrad=Instance.new("UIGradient") _dGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()+0.35) _dGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.1),NumberSequenceKeypoint.new(1,0.35)}) _dGrad.Parent=_descLine local _progressBar=Instance.new("Frame") _progressBar.Size=UDim2.new(1,0,0,2) _progressBar.Position=UDim2.new(0,0,1,-2) _progressBar.BorderSizePixel=0 _progressBar.BackgroundColor3=_accent _progressBar.ZIndex=202 _progressBar.Parent=_card local _pbGrad=Instance.new("UIGradient") _pbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _pbGrad.Parent=_progressBar _card.Position=UDim2.new(1,60,0,0) _AnimationService:Create(_card,TweenInfo.new(0.4,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Position=UDim2.new(0,0,0,0)}):Play() local _shrinkAnim=_AnimationService:Create(_progressBar,TweenInfo.new(_seconds,Enum.EasingStyle.Linear),{Size=UDim2.new(0,0,0,2)}) _shrinkAnim:Play() _shrinkAnim.Completed:Connect(function() local _dismissAnim=_AnimationService:Create(_card,TweenInfo.new(0.3,Enum.EasingStyle.Quint,Enum.EasingDirection.In),{Position=UDim2.new(1,60,0,0),BackgroundTransparency=1}) _dismissAnim:Play() _dismissAnim.Completed:Connect(function() pcall(function() _card:Destroy() end) end) end) end function _LayoutEngine.NotifyKill(_targetName) _LayoutEngine.PlaySound("Kill",0.4,1.0) _LayoutEngine.Notify("Kill","Eliminated "..tostring(_targetName),3,Color3.fromRGB(255,60,60)) end local _statusBadge=Instance.new("Frame") _statusBadge.Size=UDim2.new(0,220,0,28) _statusBadge.Position=UDim2.new(0,20,0,20) _statusBadge.BackgroundColor3=_BG_COLOR _statusBadge.BackgroundTransparency=0.12 _statusBadge.BorderSizePixel=0 _statusBadge.ZIndex=100 _statusBadge.Parent=_rootSurface Instance.new("UICorner",_statusBadge).CornerRadius=UDim.new(0,8) local _sbGrad=Instance.new("UIGradient") _sbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _sbGrad.Rotation=15 _sbGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.42),NumberSequenceKeypoint.new(1,0.2)}) _sbGrad.Parent=_statusBadge _LayoutEngine._wmGrad=_sbGrad local _sbStroke=Instance.new("UIStroke") _sbStroke.Thickness=1 _sbStroke.Transparency=0.12 _sbStroke.Parent=_statusBadge local _sbStGrad=Instance.new("UIGradient") _sbStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _sbStGrad.Parent=_sbStroke _LayoutEngine._wmStGrad=_sbStGrad local _verLabel=Instance.new("TextLabel") _verLabel.Size=UDim2.new(0,100,1,0) _verLabel.Position=UDim2.new(0,10,0,0) _verLabel.BackgroundTransparency=1 _verLabel.Text="MOON v4.1"_verLabel.TextColor3=_BRAND_COLOR _verLabel.TextSize=11 _verLabel.Font=Enum.Font.GothamBold _verLabel.TextXAlignment=Enum.TextXAlignment.Left _verLabel.ZIndex=101 _verLabel.Parent=_statusBadge local _vlStroke=Instance.new("UIStroke") _vlStroke.Thickness=1.2 _vlStroke.Color=Color3.new(0,0,0) _vlStroke.Transparency=0.15 _vlStroke.Parent=_verLabel local _vlGrad=Instance.new("UIGradient") _vlGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _vlGrad.Parent=_verLabel _LayoutEngine._wmTitleGrad=_vlGrad local _clockLabel=Instance.new("TextLabel") _clockLabel.Size=UDim2.new(0,90,1,0) _clockLabel.Position=UDim2.new(1,-96,0,0) _clockLabel.BackgroundTransparency=1 _clockLabel.TextColor3=Color3.new(1,1,1) _clockLabel.TextSize=9 _clockLabel.Font=Enum.Font.Code _clockLabel.TextXAlignment=Enum.TextXAlignment.Right _clockLabel.ZIndex=101 _clockLabel.Text=""_clockLabel.Parent=_statusBadge local _clStroke=Instance.new("UIStroke") _clStroke.Thickness=1.1 _clStroke.Color=Color3.new(0,0,0) _clStroke.Transparency=0.15 _clStroke.Parent=_clockLabel local _clGrad=Instance.new("UIGradient") _clGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _clGrad.Parent=_clockLabel _LayoutEngine._wmTimeGrad=_clGrad _LayoutEngine.wmTime=_clockLabel function _LayoutEngine.showLoadingScreen() local _splashGui=Instance.new("ScreenGui") _splashGui.Name="MoonLoad"_splashGui.ResetOnSpawn=false _splashGui.DisplayOrder=100000 _splashGui.IgnoreGuiInset=true _resolveParent(_splashGui) local _blurRef=nil local _dimLayer=Instance.new("Frame") _dimLayer.Size=UDim2.new(1,0,1,0) _dimLayer.BackgroundColor3=Color3.new(0,0,0) _dimLayer.BackgroundTransparency=0.08 _dimLayer.BorderSizePixel=0 _dimLayer.Parent=_splashGui local _dimGrad=Instance.new("UIGradient") _dimGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _dimGrad.Rotation=30 _dimGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.18),NumberSequenceKeypoint.new(1,0)}) _dimGrad.Parent=_dimLayer local _splashCard=Instance.new("Frame") _splashCard.Size=UDim2.new(0,360,0,108) _splashCard.Position=UDim2.new(0.5,-180,0.5,-54) _splashCard.BackgroundColor3=_BG_COLOR _splashCard.BackgroundTransparency=1 _splashCard.BorderSizePixel=0 _splashCard.Parent=_splashGui Instance.new("UICorner",_splashCard).CornerRadius=UDim.new(0,14) local _scGrad=Instance.new("UIGradient") _scGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _scGrad.Rotation=20 _scGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.32),NumberSequenceKeypoint.new(1,0.16)}) _scGrad.Parent=_splashCard local _scStroke=Instance.new("UIStroke") _scStroke.Thickness=1.5 _scStroke.Transparency=1 _scStroke.Parent=_splashCard local _scStGrad=Instance.new("UIGradient") _scStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _scStGrad.Parent=_scStroke local _splashTitle=Instance.new("TextLabel") _splashTitle.Text="MOON"_splashTitle.Size=UDim2.new(1,0,0,24) _splashTitle.Position=UDim2.new(0,0,0,14) _splashTitle.BackgroundTransparency=1 _splashTitle.TextColor3=Color3.new(1,1,1) _splashTitle.TextTransparency=1 _splashTitle.TextSize=18 _splashTitle.Font=Enum.Font.GothamBold _splashTitle.TextXAlignment=Enum.TextXAlignment.Center _splashTitle.Parent=_splashCard local _stGrad=Instance.new("UIGradient") _stGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _stGrad.Parent=_splashTitle local _stageLabel=Instance.new("TextLabel") _stageLabel.Text="initializing..."_stageLabel.Size=UDim2.new(1,0,0,14) _stageLabel.Position=UDim2.new(0,0,0,44) _stageLabel.BackgroundTransparency=1 _stageLabel.TextColor3=Color3.new(1,1,1) _stageLabel.TextTransparency=1 _stageLabel.TextSize=10 _stageLabel.Font=Enum.Font.Gotham _stageLabel.TextXAlignment=Enum.TextXAlignment.Center _stageLabel.Parent=_splashCard local _slGrad=Instance.new("UIGradient") _slGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _slGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.15),NumberSequenceKeypoint.new(1,0.42)}) _slGrad.Parent=_stageLabel local _progressTrack=Instance.new("Frame") _progressTrack.Size=UDim2.new(0,0,0,3) _progressTrack.Position=UDim2.new(0.5,0,0,72) _progressTrack.AnchorPoint=Vector2.new(0.5,0) _progressTrack.BackgroundColor3=Color3.fromRGB(40,40,40) _progressTrack.BackgroundTransparency=0.7 _progressTrack.BorderSizePixel=0 _progressTrack.Parent=_splashCard Instance.new("UICorner",_progressTrack).CornerRadius=UDim.new(1,0) local _ptGrad=Instance.new("UIGradient") _ptGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _ptGrad.Parent=_progressTrack local _progressFill=Instance.new("Frame") _progressFill.Size=UDim2.new(0,0,1,0) _progressFill.BackgroundColor3=_ACCENT_COLOR _progressFill.BorderSizePixel=0 _progressFill.Parent=_progressTrack Instance.new("UICorner",_progressFill).CornerRadius=UDim.new(1,0) local _pfGrad=Instance.new("UIGradient") _pfGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _pfGrad.Parent=_progressFill local _pctLabel=Instance.new("TextLabel") _pctLabel.Text="0%"_pctLabel.Size=UDim2.new(1,0,0,12) _pctLabel.Position=UDim2.new(0,0,0,84) _pctLabel.BackgroundTransparency=1 _pctLabel.TextColor3=Color3.new(1,1,1) _pctLabel.TextTransparency=1 _pctLabel.TextSize=8 _pctLabel.Font=Enum.Font.Code _pctLabel.TextXAlignment=Enum.TextXAlignment.Center _pctLabel.Parent=_splashCard local _pcGrad=Instance.new("UIGradient") _pcGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _pcGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.2),NumberSequenceKeypoint.new(1,0.5)}) _pcGrad.Parent=_pctLabel _AnimationService:Create(_splashCard,TweenInfo.new(0.5,Enum.EasingStyle.Quint),{BackgroundTransparency=0.08}):Play() _AnimationService:Create(_scStroke,TweenInfo.new(0.5),{Transparency=0.14}):Play() _AnimationService:Create(_splashTitle,TweenInfo.new(0.5),{TextTransparency=0}):Play() _AnimationService:Create(_stageLabel,TweenInfo.new(0.5),{TextTransparency=0.15}):Play() _AnimationService:Create(_pctLabel,TweenInfo.new(0.5),{TextTransparency=0.3}):Play() _AnimationService:Create(_progressTrack,TweenInfo.new(0.4),{Size=UDim2.new(0,280,0,3),BackgroundTransparency=0.45}):Play() local _stages={{10,"initializing"},{20,"mapping"},{35,"patching"},{50,"injecting"},{65,"calibrating"},{80,"bypassing"},{92,"loading"},{100,"ready"}}coroutine.wrap(function() wait(0.6) for _,_stage in ipairs(_stages) do _pfGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _scStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _AnimationService:Create(_progressFill,TweenInfo.new(0.25,Enum.EasingStyle.Quint),{Size=UDim2.new(_stage[1]/100,0,1,0)}):Play() _stageLabel.Text=_stage[2]_pctLabel.Text=_stage[1].."%"wait(math.random(8,18)*0.01) end _stageLabel.Text="complete"_pctLabel.Text="100%"wait(0.4) for _,_elem in ipairs({_splashCard,_splashTitle,_stageLabel,_pctLabel,_progressFill,_progressTrack,_dimLayer}) do _AnimationService:Create(_elem,TweenInfo.new(0.3),{BackgroundTransparency=1}):Play() end _AnimationService:Create(_scStroke,TweenInfo.new(0.3),{Transparency=1}):Play() _AnimationService:Create(_splashTitle,TweenInfo.new(0.3),{TextTransparency=1}):Play() _AnimationService:Create(_stageLabel,TweenInfo.new(0.3),{TextTransparency=1}):Play() _AnimationService:Create(_pctLabel,TweenInfo.new(0.3),{TextTransparency=1}):Play() wait(0.4) pcall(function() if _blurRef then _blurRef:Destroy() end end) pcall(function() _splashGui:Destroy() end) end)() end _LayoutEngine._chamsCache={}_LayoutEngine._chamsEnabled=false function _LayoutEngine.createChams(_character,_tint) if not _character or not _character.Parent then return nil end local _existing=_LayoutEngine._chamsCache[_character]if _existing and _existing.Parent then _existing.FillColor=_tint or _LayoutEngine.getColor(os.clock(),0) _existing.OutlineColor=_tint or _LayoutEngine.getColor(os.clock(),1) return _existing end local _hl=Instance.new("Highlight") _hl.Name="MoonChams"_hl.FillColor=_tint or _LayoutEngine.getColor(os.clock(),0) _hl.FillTransparency=0.65 _hl.OutlineColor=_tint or _LayoutEngine.getColor(os.clock(),1) _hl.OutlineTransparency=0.1 _hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop _hl.Adornee=_character _hl.Parent=_character _LayoutEngine._chamsCache[_character]=_hl return _hl end function _LayoutEngine.removeChams(_character) local _hl=_LayoutEngine._chamsCache[_character]if _hl then pcall(function() _hl:Destroy() end) _LayoutEngine._chamsCache[_character]=nil end end function _LayoutEngine.removeAllChams() for _,_hl in pairs(_LayoutEngine._chamsCache) do pcall(function() _hl:Destroy() end) end _LayoutEngine._chamsCache={}end function _LayoutEngine.updateChams(_targets,_cfg) if not _cfg.ShowChams then if _LayoutEngine._chamsEnabled then _LayoutEngine.removeAllChams() _LayoutEngine._chamsEnabled=false end return end _LayoutEngine._chamsEnabled=true local _activeChars={}for _,_tg in ipairs(_targets) do if _tg.char and _tg.char.Parent then _activeChars[_tg.char]=true local _col=_LayoutEngine.getColor(os.clock(),0) local _hl=_LayoutEngine._chamsCache[_tg.char]if _hl and _hl.Parent then _hl.FillColor=_col _hl.OutlineColor=_LayoutEngine.getColor(os.clock(),1.5) _hl.FillTransparency=_cfg.ChamsFillTransparency or 0.65 _hl.OutlineTransparency=_cfg.ChamsOutlineTransparency or 0.1 else _LayoutEngine.createChams(_tg.char,_col) end end end for _char,_hl in pairs(_LayoutEngine._chamsCache) do if not _activeChars[_char]then pcall(function() _hl:Destroy() end) _LayoutEngine._chamsCache[_char]=nil end end end _LayoutEngine.blurMain=nil local _appGui=Instance.new("ScreenGui") _appGui.Name="MoonGUI_Main"_appGui.ResetOnSpawn=false _appGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling _appGui.DisplayOrder=999 _appGui.IgnoreGuiInset=true _resolveParent(_appGui) _LayoutEngine.gui=_appGui local _appScale=Instance.new("UIScale") _appScale.Parent=_appGui coroutine.wrap(function() while _appGui and _appGui.Parent do _appScale.Scale=math.clamp(math.min(_LayoutEngine.getVP().X/_REF_WIDTH,_LayoutEngine.getVP().Y/_REF_HEIGHT),0.5,3) wait(0.6) end end)() local _bgOverlay=Instance.new("Frame") _bgOverlay.Size=UDim2.new(1,0,1,0) _bgOverlay.BackgroundColor3=Color3.new(0,0,0) _bgOverlay.BackgroundTransparency=1 _bgOverlay.BorderSizePixel=0 _bgOverlay.ZIndex=7 _bgOverlay.Visible=false _bgOverlay.Parent=_appGui local _bgOvGrad=Instance.new("UIGradient") _bgOvGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _bgOvGrad.Rotation=30 _bgOvGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.2),NumberSequenceKeypoint.new(1,0)}) _bgOvGrad.Parent=_bgOverlay _LayoutEngine._fullAurora=_bgOverlay _LayoutEngine._fullAuroraGrad=_bgOvGrad local _focusDim=Instance.new("Frame") _focusDim.Size=UDim2.new(1,0,1,0) _focusDim.BackgroundColor3=Color3.new(0,0,0) _focusDim.BackgroundTransparency=1 _focusDim.BorderSizePixel=0 _focusDim.ZIndex=8 _focusDim.Visible=false _focusDim.Parent=_appGui _LayoutEngine.dimOverlay=_focusDim local _crescentCanvas=Instance.new("Frame") _crescentCanvas.Size=UDim2.new(0,120,0,120) _crescentCanvas.Position=UDim2.new(1,-148,0,90) _crescentCanvas.BackgroundTransparency=1 _crescentCanvas.ZIndex=150 _crescentCanvas.Visible=false _crescentCanvas.Parent=_rootSurface local _crescentOuter=Instance.new("Frame") _crescentOuter.Size=UDim2.new(0,70,0,70) _crescentOuter.Position=UDim2.new(0.5,-35,0.5,-35) _crescentOuter.BackgroundColor3=_BRAND_COLOR _crescentOuter.BackgroundTransparency=0.1 _crescentOuter.BorderSizePixel=0 _crescentOuter.ZIndex=151 _crescentOuter.Parent=_crescentCanvas Instance.new("UICorner",_crescentOuter).CornerRadius=UDim.new(1,0) local _coGrad=Instance.new("UIGradient") _coGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _coGrad.Parent=_crescentOuter _LayoutEngine._moonOuterGrad=_coGrad local _crescentCut=Instance.new("Frame") _crescentCut.Size=UDim2.new(0,58,0,58) _crescentCut.Position=UDim2.new(0.5,-18,0.5,-29) _crescentCut.BackgroundColor3=Color3.fromRGB(10,10,10) _crescentCut.BackgroundTransparency=0.05 _crescentCut.BorderSizePixel=0 _crescentCut.ZIndex=152 _crescentCut.Parent=_crescentCanvas Instance.new("UICorner",_crescentCut).CornerRadius=UDim.new(1,0) _LayoutEngine.moonCanvas=_crescentCanvas _LayoutEngine.moonOuter=_crescentOuter local _keybindPanel=Instance.new("Frame") _keybindPanel.Size=UDim2.new(0,188,0,28) _keybindPanel.Position=UDim2.new(1,-210,0,56) _keybindPanel.BackgroundColor3=_BG_COLOR _keybindPanel.BackgroundTransparency=0.05 _keybindPanel.BorderSizePixel=0 _keybindPanel.ZIndex=100 _keybindPanel.ClipsDescendants=true _keybindPanel.Parent=_rootSurface Instance.new("UICorner",_keybindPanel).CornerRadius=UDim.new(0,10) local _kpGrad=Instance.new("UIGradient") _kpGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _kpGrad.Rotation=20 _kpGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.28),NumberSequenceKeypoint.new(1,0.1)}) _kpGrad.Parent=_keybindPanel _LayoutEngine._bindsGrad=_kpGrad local _kpStroke=Instance.new("UIStroke") _kpStroke.Thickness=1 _kpStroke.Transparency=0.15 _kpStroke.Parent=_keybindPanel local _kpStGrad=Instance.new("UIGradient") _kpStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _kpStGrad.Parent=_kpStroke _LayoutEngine._bfStGrad=_kpStGrad local _kpTitle=Instance.new("TextLabel") _kpTitle.Size=UDim2.new(1,-10,0,16) _kpTitle.Position=UDim2.new(0,8,0,4) _kpTitle.BackgroundTransparency=1 _kpTitle.Text="BINDS"_kpTitle.TextColor3=Color3.new(1,1,1) _kpTitle.TextSize=9 _kpTitle.Font=Enum.Font.GothamBold _kpTitle.TextXAlignment=Enum.TextXAlignment.Left _kpTitle.ZIndex=101 _kpTitle.Parent=_keybindPanel local _ktStroke=Instance.new("UIStroke") _ktStroke.Thickness=1.2 _ktStroke.Color=Color3.new(0,0,0) _ktStroke.Transparency=0.15 _ktStroke.Parent=_kpTitle local _ktGrad=Instance.new("UIGradient") _ktGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _ktGrad.Parent=_kpTitle _LayoutEngine._bindsTitleGrad=_ktGrad local _kpContent=Instance.new("Frame") _kpContent.Size=UDim2.new(1,-10,1,-22) _kpContent.Position=UDim2.new(0,5,0,22) _kpContent.BackgroundTransparency=1 _kpContent.ZIndex=101 _kpContent.Parent=_keybindPanel local _kpLayout=Instance.new("UIListLayout") _kpLayout.Padding=UDim.new(0,3) _kpLayout.SortOrder=Enum.SortOrder.LayoutOrder _kpLayout.Parent=_kpContent _LayoutEngine._bfDrag={drag=false,start=nil,pos=nil}_keybindPanel.InputBegan:Connect(function(_input) if _input.UserInputType==Enum.UserInputType.MouseButton1 then _LayoutEngine._bfDrag.drag=true _LayoutEngine._bfDrag.start=_input.Position _LayoutEngine._bfDrag.pos=_keybindPanel.Position end end) _keybindPanel.InputEnded:Connect(function(_input) if _input.UserInputType==Enum.UserInputType.MouseButton1 then _LayoutEngine._bfDrag.drag=false end end) _LayoutEngine._bindsStateCache={}_LayoutEngine._lastBindsHash=""function _LayoutEngine.pushBindEvent(_text) local _evRow=Instance.new("Frame") _evRow.Size=UDim2.new(1,0,0,0) _evRow.BackgroundColor3=Color3.fromRGB(30,30,30) _evRow.BackgroundTransparency=0.16 _evRow.BorderSizePixel=0 _evRow.ZIndex=104 _evRow.ClipsDescendants=true _evRow.Parent=_kpContent Instance.new("UICorner",_evRow).CornerRadius=UDim.new(0,8) local _erGrad=Instance.new("UIGradient") _erGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _erGrad.Rotation=12 _erGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.28),NumberSequenceKeypoint.new(1,0.1)}) _erGrad.Parent=_evRow local _erLabel=Instance.new("TextLabel") _erLabel.Size=UDim2.new(1,-10,1,0) _erLabel.Position=UDim2.new(0,10,0,0) _erLabel.BackgroundTransparency=1 _erLabel.Text=_text _erLabel.TextColor3=Color3.new(1,1,1) _erLabel.TextSize=10 _erLabel.Font=Enum.Font.GothamBold _erLabel.TextXAlignment=Enum.TextXAlignment.Left _erLabel.TextTransparency=1 _erLabel.ZIndex=105 _erLabel.Parent=_evRow local _elGrad=Instance.new("UIGradient") _elGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _elGrad.Parent=_erLabel _AnimationService:Create(_evRow,TweenInfo.new(0.28,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.new(1,0,0,22)}):Play() _AnimationService:Create(_erLabel,TweenInfo.new(0.24),{TextTransparency=0}):Play() coroutine.wrap(function() wait(2.1) _AnimationService:Create(_erLabel,TweenInfo.new(0.2),{TextTransparency=1}):Play() local _collapseAnim=_AnimationService:Create(_evRow,TweenInfo.new(0.28,Enum.EasingStyle.Quint,Enum.EasingDirection.In),{Size=UDim2.new(1,0,0,0),BackgroundTransparency=1}) _collapseAnim:Play() _collapseAnim.Completed:Connect(function() pcall(function() _evRow:Destroy() end) end) end)() end function _LayoutEngine.updateActiveBinds(_cfg,_ctx,_assistActive,_lockActive,_rotActive,_enhancedMode) local _stateMap={{"Aimbot",_cfg.Enabled,"aim "..(_cfg.Enabled and"on"or"off").." ("..tostring(_cfg.AimKey or"?")..")"},{"Locking",_assistActive,"aim lock ("..tostring(_cfg.AimKey or"?")..")"},{"Target",_lockActive,"target on ("..tostring(_cfg.TargetKey or"?")..")"},{"Spin",_rotActive,"spin on"},{"Triggerbot",_cfg.Triggerbot,"trigger on"},{"ESP",_cfg.ShowESP,"esp on"},{"Chams",_cfg.ShowChams,"chams on"},{"Dash",_cfg.DashEnabled,"dash ready ("..tostring(_cfg.DashKey or"?")..")"},{"Rage",_enhancedMode,_enhancedMode and"rage mode enabled"or"rage mode disabled"},{"R.Dash",_cfg.RageDash,"rage dash on"},{"R.Target",_cfg.RageTarget,"rage target on"}}for _,_item in ipairs(_stateMap) do local _ck,_cur=_item[1],_item[2]if _LayoutEngine._bindsStateCache[_ck]==nil then _LayoutEngine._bindsStateCache[_ck]=_cur elseif _LayoutEngine._bindsStateCache[_ck]~=_cur then _LayoutEngine._bindsStateCache[_ck]=_cur if _cur then _LayoutEngine.pushBindEvent(_item[3]) end end end for _,_child in ipairs(_kpContent:GetChildren()) do if _child:IsA("Frame") and _child.Name=="BindStateRow"then _child:Destroy() end end local _activeItems={}local function _addItem(_n,_a,_k) _activeItems[#_activeItems+1]={n=_n,a=_a,k=_k or""}end _addItem("Aimbot",_cfg.Enabled,_cfg.AimKey) if _assistActive then _addItem("Locking",true,_cfg.AimKey) end if _lockActive then _addItem("Target",true,_cfg.TargetKey) end if _rotActive then _addItem("Spin",true,"") end _addItem("Trigger",_cfg.Triggerbot,"") _addItem("ESP",_cfg.ShowESP,"") _addItem("Chams",_cfg.ShowChams,"") _addItem("Dash",_cfg.DashEnabled,_cfg.DashKey) if _enhancedMode then _addItem("Rage",true,"") end if _cfg.RageDash then _addItem("R.Dash",true,"") end if _cfg.RageTarget then _addItem("R.Target",true,"") end local _stateHash=""for _,_item in ipairs(_activeItems) do _stateHash=_stateHash.._item.n..tostring(_item.a).._item.k..";"end if _stateHash==_LayoutEngine._lastBindsHash then return end _LayoutEngine._lastBindsHash=_stateHash for _,_child in ipairs(_kpContent:GetChildren()) do if _child:IsA("Frame") and _child.Name=="BindStateRow"then _child:Destroy() end end for _idx,_item in ipairs(_activeItems) do local _row=Instance.new("Frame") _row.Name="BindStateRow"_row.Size=UDim2.new(1,0,0,18) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.1 _row.BorderSizePixel=0 _row.ZIndex=102 _row.LayoutOrder=1000+_idx _row.Parent=_kpContent Instance.new("UICorner",_row).CornerRadius=UDim.new(0,7) local _rLabel=Instance.new("TextLabel") _rLabel.Size=UDim2.new(1,-10,1,0) _rLabel.Position=UDim2.new(0,8,0,0) _rLabel.BackgroundTransparency=1 _rLabel.Text=_item.k~=""and(_item.n.." (".._item.k..")") or _item.n _rLabel.TextColor3=Color3.new(1,1,1) _rLabel.TextSize=9 _rLabel.Font=Enum.Font.GothamBold _rLabel.TextXAlignment=Enum.TextXAlignment.Left _rLabel.ZIndex=103 _rLabel.Parent=_row end _keybindPanel.Size=UDim2.new(0,188,0,math.min(math.max(28+#_activeItems*21,28)+8,240)) end _LayoutEngine.bindsFrame=_keybindPanel local _HUD_LINES=18 local _hudPanel=Instance.new("Frame") _hudPanel.Size=UDim2.new(0,220,0,180) _hudPanel.Position=UDim2.new(0,20,0.5,-90) _hudPanel.BackgroundColor3=_BG_COLOR _hudPanel.BackgroundTransparency=0.05 _hudPanel.BorderSizePixel=0 _hudPanel.ZIndex=5 _hudPanel.Visible=false _hudPanel.ClipsDescendants=true _hudPanel.Parent=_appGui Instance.new("UICorner",_hudPanel).CornerRadius=UDim.new(0,10) local _hpGrad=Instance.new("UIGradient") _hpGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _hpGrad.Rotation=15 _hpGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.18)}) _hpGrad.Parent=_hudPanel _LayoutEngine._hudGrad=_hpGrad local _hpStroke=Instance.new("UIStroke") _hpStroke.Thickness=1 _hpStroke.Transparency=0.18 _hpStroke.Parent=_hudPanel local _hpStGrad=Instance.new("UIGradient") _hpStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _hpStGrad.Parent=_hpStroke _LayoutEngine._hudStGrad=_hpStGrad Instance.new("UIListLayout",_hudPanel).Padding=UDim.new(0,2) local _hudPad=Instance.new("UIPadding") _hudPad.PaddingTop=UDim.new(0,7) _hudPad.PaddingLeft=UDim.new(0,10) _hudPad.PaddingRight=UDim.new(0,10) _hudPad.PaddingBottom=UDim.new(0,7) _hudPad.Parent=_hudPanel local _hudLabels={}for _i=1,_HUD_LINES do local _line=Instance.new("TextLabel") _line.Size=UDim2.new(1,0,0,13) _line.BackgroundTransparency=1 _line.TextXAlignment=Enum.TextXAlignment.Left _line.Font=Enum.Font.GothamBold _line.TextSize=10 _line.Visible=false _line.ZIndex=6 _line.TextColor3=Color3.new(1,1,1) _line.Text=""_line.Parent=_hudPanel local _lineGrad=Instance.new("UIGradient") _lineGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()+_i*0.1) _lineGrad.Parent=_line _hudLabels[_i]=_line end _LayoutEngine.hudFrame=_hudPanel _LayoutEngine.hudT=_hudLabels _LayoutEngine.HUD_MAX=_HUD_LINES local _WINDOW_PRESETS={{w=860,h=580},{w=680,h=460},{w=1120,h=700}}_LayoutEngine.WIN_MODES=_WINDOW_PRESETS function _LayoutEngine.getWS(_cfg) local _preset=_WINDOW_PRESETS[_cfg.WindowMode]or _WINDOW_PRESETS[1]return _preset.w,_preset.h end local _winW,_winH=860,580 local _mainWindow=Instance.new("Frame") _mainWindow.Name="W"_mainWindow.Size=UDim2.new(0,_winW,0,_winH) _mainWindow.Position=UDim2.new(0.5,-_winW/2,0.5,-_winH/2) _mainWindow.BackgroundColor3=Color3.fromRGB(10,10,10) _mainWindow.BackgroundTransparency=0.05 _mainWindow.BorderSizePixel=0 _mainWindow.Visible=false _mainWindow.ZIndex=10 _mainWindow.ClipsDescendants=true _mainWindow.Parent=_appGui Instance.new("UICorner",_mainWindow).CornerRadius=UDim.new(0,14) local _mwGrad=Instance.new("UIGradient") _mwGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _mwGrad.Rotation=20 _mwGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.65),NumberSequenceKeypoint.new(1,0.3)}) _mwGrad.Parent=_mainWindow _LayoutEngine._mainGrad=_mwGrad local _mwStroke=Instance.new("UIStroke") _mwStroke.Thickness=1.5 _mwStroke.Transparency=0.08 _mwStroke.Parent=_mainWindow local _mwStGrad=Instance.new("UIGradient") _mwStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _mwStGrad.Parent=_mwStroke _LayoutEngine._gStGrad=_mwStGrad _LayoutEngine.W=_mainWindow _LayoutEngine.gSt=_mwStroke local _enhancedOverlay=Instance.new("Frame") _enhancedOverlay.Size=UDim2.new(1,0,1,0) _enhancedOverlay.BackgroundColor3=_ACCENT_COLOR _enhancedOverlay.BackgroundTransparency=1 _enhancedOverlay.BorderSizePixel=0 _enhancedOverlay.ZIndex=10 _enhancedOverlay.Parent=_mainWindow local _eoGrad=Instance.new("UIGradient") _eoGrad.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(255,60,90)),ColorSequenceKeypoint.new(0.5,Color3.fromRGB(180,50,150)),ColorSequenceKeypoint.new(1,Color3.fromRGB(255,120,120))}) _eoGrad.Rotation=45 _eoGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.12)}) _eoGrad.Parent=_enhancedOverlay _LayoutEngine._rageOverlay=_enhancedOverlay local _starDecor={}for _i=1,24 do local _star=Instance.new("Frame") local _sz=math.random(1,2) _star.Size=UDim2.new(0,_sz,0,_sz) _star.Position=UDim2.new(0,math.random(10,_winW-10),0,math.random(60,_winH-10)) _star.BackgroundColor3=_ACCENT_COLOR _star.BackgroundTransparency=math.random(50,80)/100 _star.BorderSizePixel=0 _star.ZIndex=11 _star.Parent=_mainWindow Instance.new("UICorner",_star).CornerRadius=UDim.new(1,0) _starDecor[_i]=_star end _LayoutEngine.guiStars=_starDecor local _headerBar=Instance.new("Frame") _headerBar.Size=UDim2.new(1,0,0,48) _headerBar.BackgroundColor3=Color3.fromRGB(20,20,20) _headerBar.BackgroundTransparency=0.05 _headerBar.BorderSizePixel=0 _headerBar.ZIndex=12 _headerBar.Parent=_mainWindow Instance.new("UICorner",_headerBar).CornerRadius=UDim.new(0,14) local _hbGrad=Instance.new("UIGradient") _hbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _hbGrad.Rotation=20 _hbGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.18)}) _hbGrad.Parent=_headerBar _LayoutEngine._titleBarGrad=_hbGrad _LayoutEngine.tB=_headerBar local _headerAccent=Instance.new("Frame") _headerAccent.Size=UDim2.new(1,0,0,2) _headerAccent.Position=UDim2.new(0,0,1,-2) _headerAccent.BackgroundColor3=_ACCENT_COLOR _headerAccent.BackgroundTransparency=0.08 _headerAccent.BorderSizePixel=0 _headerAccent.ZIndex=14 _headerAccent.Parent=_headerBar local _haGrad=Instance.new("UIGradient") _haGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _haGrad.Parent=_headerAccent _LayoutEngine._tLGrad=_haGrad local _brandBtn=Instance.new("Frame") _brandBtn.Size=UDim2.new(0,96,0,30) _brandBtn.Position=UDim2.new(0,10,0.5,-15) _brandBtn.BackgroundColor3=_ACCENT_COLOR _brandBtn.BackgroundTransparency=0.05 _brandBtn.BorderSizePixel=0 _brandBtn.ZIndex=15 _brandBtn.ClipsDescendants=true _brandBtn.Parent=_headerBar Instance.new("UICorner",_brandBtn).CornerRadius=UDim.new(0,8) local _bbGrad=Instance.new("UIGradient") _bbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _bbGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.3),NumberSequenceKeypoint.new(1,0.14)}) _bbGrad.Parent=_brandBtn _LayoutEngine._moonBtnGrad=_bbGrad local _brandLabel=Instance.new("TextLabel") _brandLabel.Size=UDim2.new(1,0,1,0) _brandLabel.BackgroundTransparency=1 _brandLabel.Text="MOON"_brandLabel.TextColor3=_BRAND_COLOR _brandLabel.TextSize=13 _brandLabel.Font=Enum.Font.GothamBold _brandLabel.ZIndex=16 _brandLabel.Parent=_brandBtn local _blStroke=Instance.new("UIStroke") _blStroke.Thickness=1.2 _blStroke.Color=Color3.new(0,0,0) _blStroke.Transparency=0.1 _blStroke.Parent=_brandLabel local _blGrad=Instance.new("UIGradient") _blGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _blGrad.Parent=_brandLabel _LayoutEngine._moonBtnTxtGrad=_blGrad _LayoutEngine.moonBtnTxt=_brandLabel local _stateBadge=Instance.new("TextLabel") _stateBadge.Text="OFF"_stateBadge.Size=UDim2.new(0,62,0,24) _stateBadge.Position=UDim2.new(0,116,0.5,-12) _stateBadge.BackgroundColor3=_ACCENT_COLOR _stateBadge.BackgroundTransparency=0.05 _stateBadge.TextColor3=Color3.new(1,1,1) _stateBadge.TextSize=10 _stateBadge.Font=Enum.Font.GothamBold _stateBadge.BorderSizePixel=0 _stateBadge.ZIndex=15 _stateBadge.Parent=_headerBar Instance.new("UICorner",_stateBadge).CornerRadius=UDim.new(0,6) local _sbdGrad=Instance.new("UIGradient") _sbdGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _sbdGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.3),NumberSequenceKeypoint.new(1,0.14)}) _sbdGrad.Parent=_stateBadge local _sbdStroke=Instance.new("UIStroke") _sbdStroke.Thickness=1 _sbdStroke.Color=Color3.new(0,0,0) _sbdStroke.Transparency=0.2 _sbdStroke.Parent=_stateBadge _LayoutEngine._statusGrad=_sbdGrad _LayoutEngine.guiStatus=_stateBadge local function _createMetricLabel(_text,_width,_xPos) local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(0,_width,0,14) _lbl.Position=UDim2.new(0,_xPos,0.5,-7) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=9 _lbl.Font=Enum.Font.Code _lbl.ZIndex=15 _lbl.Parent=_headerBar local _mStroke=Instance.new("UIStroke") _mStroke.Thickness=1 _mStroke.Color=Color3.new(0,0,0) _mStroke.Transparency=0.15 _mStroke.Parent=_lbl local _mGrad=Instance.new("UIGradient") _mGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _mGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.1),NumberSequenceKeypoint.new(1,0.35)}) _mGrad.Parent=_lbl return _lbl,_mGrad end local _fpsMetric,_fpsGrad=_createMetricLabel("60",54,188) _LayoutEngine._fpsGrad=_fpsGrad _LayoutEngine.guiFPS=_fpsMetric local _statsMetric,_statsGrad=_createMetricLabel("0 kills",60,246) _LayoutEngine._killsGrad=_statsGrad _LayoutEngine.guiKills=_statsMetric local _pingMetric,_pingGrad=_createMetricLabel("0ms",50,310) _LayoutEngine._pingGrad=_pingGrad _LayoutEngine.guiPing=_pingMetric local _isMinimized=false _LayoutEngine._dragState={drag=false,start=nil,pos=nil}_LayoutEngine._onClose=nil _LayoutEngine._onRageToggle=nil local function _createHeaderButton(_label,_xOffset,_handler) local _btn=Instance.new("TextButton") _btn.Text=_label _btn.Size=UDim2.new(0,32,0,26) _btn.Position=UDim2.new(1,_xOffset,0.5,-13) _btn.BackgroundColor3=Color3.fromRGB(40,40,40) _btn.BackgroundTransparency=0.05 _btn.TextColor3=Color3.new(1,1,1) _btn.TextSize=13 _btn.Font=Enum.Font.GothamBold _btn.BorderSizePixel=0 _btn.ZIndex=16 _btn.ClipsDescendants=true _btn.AutoButtonColor=false _btn.Parent=_headerBar Instance.new("UICorner",_btn).CornerRadius=UDim.new(0,7) local _btnGrad=Instance.new("UIGradient") _btnGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _btnGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.3),NumberSequenceKeypoint.new(1,0.15)}) _btnGrad.Parent=_btn _btn.MouseEnter:Connect(function() _AnimationService:Create(_btn,TweenInfo.new(0.2),{BackgroundTransparency=0.02}):Play() end) _btn.MouseLeave:Connect(function() _AnimationService:Create(_btn,TweenInfo.new(0.2),{BackgroundTransparency=0.12}):Play() end) _btn.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Click",0.25,1) _LayoutEngine.Ripple(_btn,_btn.AbsoluteSize.X/2,_btn.AbsoluteSize.Y/2) if _handler then _handler() end end) return _btn,_btnGrad end local _closeBtn,_closeBtnGrad=_createHeaderButton("\195\151",-38,function() if _LayoutEngine._onClose then _LayoutEngine._onClose() else _LayoutEngine.closeMenu({WindowMode=1}) _LayoutEngine.destroy() end end) _LayoutEngine._closeBtn=_closeBtn _LayoutEngine._closeBtnG=_closeBtnGrad local _minBtn,_minBtnGrad=_createHeaderButton("\226\128\148",-74,function() _isMinimized=not _isMinimized _AnimationService:Create(_mainWindow,TweenInfo.new(0.35,Enum.EasingStyle.Quint),{Size=_isMinimized and UDim2.new(0,_winW,0,48) or UDim2.new(0,_winW,0,_winH)}):Play() end) _LayoutEngine._minBtnG=_minBtnGrad local _enhanceBtn=Instance.new("TextButton") _enhanceBtn.Size=UDim2.new(0,98,0,28) _enhanceBtn.Position=UDim2.new(0,18,1,-50) _enhanceBtn.BackgroundColor3=Color3.fromRGB(180,30,30) _enhanceBtn.BackgroundTransparency=0.1 _enhanceBtn.Text="RAGE"_enhanceBtn.TextColor3=Color3.new(1,1,1) _enhanceBtn.TextSize=11 _enhanceBtn.Font=Enum.Font.GothamBold _enhanceBtn.BorderSizePixel=0 _enhanceBtn.ZIndex=50 _enhanceBtn.Visible=true _enhanceBtn.AutoButtonColor=false _enhanceBtn.ClipsDescendants=true _enhanceBtn.Parent=_appGui Instance.new("UICorner",_enhanceBtn).CornerRadius=UDim.new(0,8) local _ebGrad=Instance.new("UIGradient") _ebGrad.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(255,60,90)),ColorSequenceKeypoint.new(0.5,Color3.fromRGB(180,50,150)),ColorSequenceKeypoint.new(1,Color3.fromRGB(255,120,120))}) _ebGrad.Rotation=20 _ebGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.28),NumberSequenceKeypoint.new(1,0.1)}) _ebGrad.Parent=_enhanceBtn _LayoutEngine.rageBtn=_enhanceBtn _LayoutEngine._rageBtnGrad=_ebGrad _enhanceBtn.MouseEnter:Connect(function() _AnimationService:Create(_enhanceBtn,TweenInfo.new(0.2),{BackgroundTransparency=0.02}):Play() end) _enhanceBtn.MouseLeave:Connect(function() _AnimationService:Create(_enhanceBtn,TweenInfo.new(0.2),{BackgroundTransparency=0.1}):Play() end) _enhanceBtn.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Rage",0.28,1) _LayoutEngine.Ripple(_enhanceBtn,_enhanceBtn.AbsoluteSize.X/2,_enhanceBtn.AbsoluteSize.Y/2) if _LayoutEngine._onRageToggle then _LayoutEngine._onRageToggle() end end) _headerBar.InputBegan:Connect(function(_inp) if _inp.UserInputType==Enum.UserInputType.MouseButton1 then _LayoutEngine._dragState.drag=true _LayoutEngine._dragState.start=_inp.Position _LayoutEngine._dragState.pos=_mainWindow.Position end end) _headerBar.InputEnded:Connect(function(_inp) if _inp.UserInputType==Enum.UserInputType.MouseButton1 then _LayoutEngine._dragState.drag=false end end) local _contentBody=Instance.new("Frame") _contentBody.Size=UDim2.new(1,0,1,-48) _contentBody.Position=UDim2.new(0,0,0,48) _contentBody.BackgroundTransparency=1 _contentBody.BorderSizePixel=0 _contentBody.ZIndex=11 _contentBody.Parent=_mainWindow local _tabStrip=Instance.new("Frame") _tabStrip.Size=UDim2.new(1,0,0,36) _tabStrip.BackgroundColor3=Color3.fromRGB(20,20,20) _tabStrip.BackgroundTransparency=0.05 _tabStrip.BorderSizePixel=0 _tabStrip.ZIndex=13 _tabStrip.Parent=_contentBody local _tsGrad=Instance.new("UIGradient") _tsGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _tsGrad.Rotation=10 _tsGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.18)}) _tsGrad.Parent=_tabStrip _LayoutEngine._tabBarGrad=_tsGrad local _tabIndicator=Instance.new("Frame") _tabIndicator.Size=UDim2.new(0,0,0,2) _tabIndicator.Position=UDim2.new(0,0,1,-2) _tabIndicator.BackgroundColor3=_ACCENT_COLOR _tabIndicator.BorderSizePixel=0 _tabIndicator.ZIndex=15 _tabIndicator.Parent=_tabStrip local _tiGrad=Instance.new("UIGradient") _tiGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _tiGrad.Parent=_tabIndicator _LayoutEngine._tabIndGrad=_tiGrad _LayoutEngine.tabInd=_tabIndicator local _tabContent=Instance.new("Frame") _tabContent.Size=UDim2.new(1,0,1,-36) _tabContent.Position=UDim2.new(0,0,0,36) _tabContent.BackgroundTransparency=1 _tabContent.BorderSizePixel=0 _tabContent.ZIndex=12 _tabContent.Parent=_contentBody _LayoutEngine.NormalTabs={"Combat","Visual","Binds","UI","Cfg","Patch"}_LayoutEngine.RageTabs={"Combat","Visual","Movement","Binds","UI","Cfg","Patch"}local _tabButtons,_tabPages,_pageOrders={},{},{}local _activeTab,_currentTabs=1,{}local _isEnhancedMode=false _LayoutEngine.isRageMode=false for _i=1,7 do local _page=Instance.new("ScrollingFrame") _page.Name="P".._i _page.Size=UDim2.new(1,0,1,0) _page.BackgroundTransparency=1 _page.ScrollBarThickness=3 _page.ScrollBarImageColor3=Color3.fromRGB(255,255,255) _page.ScrollBarImageTransparency=0.35 _page.CanvasSize=UDim2.new(0,0,0,0) _page.BorderSizePixel=0 _page.Visible=false _page.ZIndex=13 _page.ScrollingDirection=Enum.ScrollingDirection.Y _page.Parent=_tabContent local _pageLayout=Instance.new("UIListLayout") _pageLayout.Padding=UDim.new(0,4) _pageLayout.SortOrder=Enum.SortOrder.LayoutOrder _pageLayout.Parent=_page _pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() _page.CanvasSize=UDim2.new(0,0,0,_pageLayout.AbsoluteContentSize.Y+20) end) local _pagePad=Instance.new("UIPadding") _pagePad.PaddingTop=UDim.new(0,10) _pagePad.PaddingLeft=UDim.new(0,16) _pagePad.PaddingRight=UDim.new(0,16) _pagePad.PaddingBottom=UDim.new(0,16) _pagePad.Parent=_page _tabPages[_i]=_page _pageOrders[_i]=0 end local function _nextOrder(_pi) _pageOrders[_pi]=_pageOrders[_pi]+1 return _pageOrders[_pi]end function _LayoutEngine.getMappedPage(_tabIdx,_enhanced) if _enhanced then return _tabIdx end if _tabIdx<=2 then return _tabIdx end if _tabIdx==3 then return 4 end if _tabIdx==4 then return 5 end if _tabIdx==5 then return 6 end return 7 end local function _rebuildTabButtons() for _,_btn in ipairs(_tabButtons) do if _btn then _btn:Destroy() end end table.clear(_tabButtons) _currentTabs=_isEnhancedMode and _LayoutEngine.RageTabs or _LayoutEngine.NormalTabs _LayoutEngine.TabNames=_currentTabs local _count=#_currentTabs local _btnWidth=math.floor(_winW/_count) for _i,_name in ipairs(_currentTabs) do local _btn=Instance.new("TextButton") _btn.Text=_name _btn.Size=UDim2.new(0,_btnWidth,1,0) _btn.Position=UDim2.new(0,(_i-1)*_btnWidth,0,0) _btn.BackgroundTransparency=1 _btn.TextColor3=Color3.new(1,1,1) _btn.TextSize=11 _btn.Font=Enum.Font.GothamBold _btn.BorderSizePixel=0 _btn.AutoButtonColor=false _btn.ZIndex=15 _btn.Parent=_tabStrip local _tbGrad=Instance.new("UIGradient") _tbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()+_i*0.2) _tbGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.02),NumberSequenceKeypoint.new(1,0.14)}) _tbGrad.Parent=_btn _btn.MouseEnter:Connect(function() if _activeTab~=_i then _AnimationService:Create(_btn,TweenInfo.new(0.15),{TextTransparency=0.1}):Play() end end) _btn.MouseLeave:Connect(function() if _activeTab~=_i then _AnimationService:Create(_btn,TweenInfo.new(0.15),{TextTransparency=0.35}):Play() end end) _btn.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Tab",0.22,1.02) _activeTab=_i for _pi=1,7 do _tabPages[_pi].Visible=false end _tabPages[_LayoutEngine.getMappedPage(_i,_isEnhancedMode)].Visible=true for _bi,_bb in ipairs(_tabButtons) do _AnimationService:Create(_bb,TweenInfo.new(0.25,Enum.EasingStyle.Quint),{TextTransparency=(_bi==_i) and 0 or 0.35}):Play() end _AnimationService:Create(_tabIndicator,TweenInfo.new(0.35,Enum.EasingStyle.Quint),{Position=UDim2.new(0,(_i-1)*_btnWidth+8,1,-2),Size=UDim2.new(0,_btnWidth-16,0,2)}):Play() end) _btn.TextTransparency=_i==_activeTab and 0 or 0.35 _tabButtons[_i]=_btn end for _pi=1,7 do _tabPages[_pi].Visible=false end _tabPages[_LayoutEngine.getMappedPage(_activeTab,_isEnhancedMode)].Visible=true local _w=math.floor(_winW/#_currentTabs) _tabIndicator.Size=UDim2.new(0,_w-16,0,2) _tabIndicator.Position=UDim2.new(0,(_activeTab-1)*_w+8,1,-2) end function _LayoutEngine.setRageMode(_state) _state=not not _state _isEnhancedMode=_state _LayoutEngine.isRageMode=_state _AnimationService:Create(_enhancedOverlay,TweenInfo.new(0.35,Enum.EasingStyle.Quint),{BackgroundTransparency=_state and 0.88 or 1}):Play() _AnimationService:Create(_bgOverlay,TweenInfo.new(0.35,Enum.EasingStyle.Quint),{BackgroundTransparency=_state and 0.18 or 0.32}):Play() _enhanceBtn.Text=_state and"RAGE ON"or"RAGE"_brandLabel.Text=_state and"MOON R"or"MOON"if _activeTab>#(_state and _LayoutEngine.RageTabs or _LayoutEngine.NormalTabs) then _activeTab=1 end _rebuildTabButtons() end _LayoutEngine.tPs=_tabPages _LayoutEngine.tBs=_tabButtons _LayoutEngine.refreshTabs=_rebuildTabButtons _rebuildTabButtons() function _LayoutEngine.makeSection(_pi,_text) local _frame=Instance.new("Frame") _frame.Size=UDim2.new(1,-4,0,26) _frame.BackgroundTransparency=1 _frame.LayoutOrder=_nextOrder(_pi) _frame.ZIndex=18 _frame.Parent=_tabPages[_pi]local _label=Instance.new("TextLabel") _label.Text=string.upper(_text) _label.Size=UDim2.new(1,0,1,0) _label.BackgroundTransparency=1 _label.TextSize=10 _label.Font=Enum.Font.GothamBold _label.TextXAlignment=Enum.TextXAlignment.Left _label.ZIndex=20 _label.TextColor3=Color3.new(1,1,1) _label.Parent=_frame local _lStroke=Instance.new("UIStroke") _lStroke.Thickness=1.2 _lStroke.Color=Color3.new(0,0,0) _lStroke.Transparency=0.15 _lStroke.Parent=_label local _lGrad=Instance.new("UIGradient") _lGrad.Color=_LayoutEngine.getSequence(os.clock()) _lGrad.Parent=_label local _underline=Instance.new("Frame") _underline.Size=UDim2.new(1,0,0,1) _underline.Position=UDim2.new(0,0,1,-1) _underline.BackgroundColor3=_ACCENT_COLOR _underline.BackgroundTransparency=0.55 _underline.BorderSizePixel=0 _underline.ZIndex=20 _underline.Parent=_frame local _ulGrad=Instance.new("UIGradient") _ulGrad.Color=_LayoutEngine.getSequence(os.clock()) _ulGrad.Parent=_underline end function _LayoutEngine.makeToggle(_pi,_text,_key,_cfg,_onChanged) local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,36) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.15 _row.BorderSizePixel=0 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.ClipsDescendants=true _row.Parent=_tabPages[_pi]Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8) local _rowGrad=Instance.new("UIGradient") _rowGrad.Color=_LayoutEngine.getSequence(os.clock()) _rowGrad.Rotation=20 _rowGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.65),NumberSequenceKeypoint.new(1,0.45)}) _rowGrad.Parent=_row local _rowLabel=Instance.new("TextLabel") _rowLabel.Text=_text _rowLabel.Size=UDim2.new(1,-56,1,0) _rowLabel.Position=UDim2.new(0,12,0,0) _rowLabel.BackgroundTransparency=1 _rowLabel.TextColor3=Color3.new(1,1,1) _rowLabel.TextSize=11 _rowLabel.Font=Enum.Font.GothamSemibold _rowLabel.TextXAlignment=Enum.TextXAlignment.Left _rowLabel.ZIndex=20 _rowLabel.Parent=_row local _rlStroke=Instance.new("UIStroke") _rlStroke.Thickness=1.2 _rlStroke.Color=Color3.new(0,0,0) _rlStroke.Transparency=0.15 _rlStroke.Parent=_rowLabel local _rlGrad=Instance.new("UIGradient") _rlGrad.Color=_LayoutEngine.getSequence(os.clock()) _rlGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.02),NumberSequenceKeypoint.new(1,0.15)}) _rlGrad.Parent=_rowLabel local _pill=Instance.new("Frame") _pill.Size=UDim2.new(0,40,0,20) _pill.Position=UDim2.new(1,-48,0.5,-10) _pill.BackgroundColor3=_cfg[_key]and _ACCENT_COLOR or Color3.fromRGB(50,50,50) _pill.BackgroundTransparency=0.05 _pill.BorderSizePixel=0 _pill.ZIndex=20 _pill.Parent=_row Instance.new("UICorner",_pill).CornerRadius=UDim.new(1,0) local _pillGrad=Instance.new("UIGradient") _pillGrad.Color=_LayoutEngine.getSequence(os.clock()) _pillGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,_cfg[_key]and 0.15 or 0.55),NumberSequenceKeypoint.new(1,_cfg[_key]and 0.02 or 0.35)}) _pillGrad.Parent=_pill local _knob=Instance.new("Frame") _knob.Size=UDim2.new(0,14,0,14) _knob.Position=_cfg[_key]and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7) _knob.BackgroundColor3=Color3.fromRGB(220,220,220) _knob.BorderSizePixel=0 _knob.ZIndex=21 _knob.Parent=_pill Instance.new("UICorner",_knob).CornerRadius=UDim.new(1,0) local _glow=Instance.new("Frame") _glow.Size=UDim2.new(1,6,1,6) _glow.Position=UDim2.new(0,-3,0,-3) _glow.BackgroundColor3=_ACCENT_COLOR _glow.BackgroundTransparency=_cfg[_key]and 0.85 or 1 _glow.BorderSizePixel=0 _glow.ZIndex=19 _glow.Parent=_pill Instance.new("UICorner",_glow).CornerRadius=UDim.new(1,0) _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.3}):Play() end) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play() end) local _clickRegion=Instance.new("TextButton") _clickRegion.Size=UDim2.new(1,0,1,0) _clickRegion.BackgroundTransparency=1 _clickRegion.Text=""_clickRegion.ZIndex=22 _clickRegion.AutoButtonColor=false _clickRegion.Parent=_row _clickRegion.MouseButton1Click:Connect(function() _cfg[_key]=not _cfg[_key]local _on=_cfg[_key]_LayoutEngine.PlaySound(_on and"ToggleOn"or"ToggleOff",0.25,_on and 1.1 or 0.9) local _mpos=_InputAdapter:GetMouseLocation() _LayoutEngine.Ripple(_row,_mpos.X-_row.AbsolutePosition.X,_mpos.Y-_row.AbsolutePosition.Y) _AnimationService:Create(_pill,TweenInfo.new(0.3,Enum.EasingStyle.Quint),{BackgroundColor3=_on and _ACCENT_COLOR or Color3.fromRGB(50,50,50),BackgroundTransparency=0.05}):Play() _AnimationService:Create(_knob,TweenInfo.new(0.3,Enum.EasingStyle.Quint),{Position=_on and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7)}):Play() _AnimationService:Create(_glow,TweenInfo.new(0.3,Enum.EasingStyle.Quint),{BackgroundTransparency=_on and 0.85 or 1}):Play() if _onChanged then _onChanged(_on) end end) end function _LayoutEngine.makeSlider(_pi,_text,_key,_mn,_mx,_step,_cfg,_connections) _connections=_connections or{}local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,42) _row.BackgroundTransparency=0.85 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.Parent=_tabPages[_pi]Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8) _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.3}):Play() end) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play() end) local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(0.55,0,0,14) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=10 _lbl.Font=Enum.Font.Gotham _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.Parent=_row local _lStroke=Instance.new("UIStroke") _lStroke.Thickness=1.2 _lStroke.Color=Color3.new(0,0,0) _lStroke.Transparency=0.15 _lStroke.Parent=_lbl local _lGrad=Instance.new("UIGradient") _lGrad.Color=_LayoutEngine.getSequence(os.clock()) _lGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.1),NumberSequenceKeypoint.new(1,0.35)}) _lGrad.Parent=_lbl local _valLabel=Instance.new("TextLabel") _valLabel.Text=_step<1 and string.format("%.2f",_cfg[_key]) or tostring(math.floor(_cfg[_key])) _valLabel.Size=UDim2.new(0.43,0,0,14) _valLabel.Position=UDim2.new(0.55,0,0,0) _valLabel.BackgroundTransparency=1 _valLabel.TextColor3=Color3.new(1,1,1) _valLabel.TextSize=11 _valLabel.Font=Enum.Font.GothamBold _valLabel.TextXAlignment=Enum.TextXAlignment.Right _valLabel.ZIndex=20 _valLabel.Parent=_row local _vStroke=Instance.new("UIStroke") _vStroke.Thickness=1.2 _vStroke.Color=Color3.new(0,0,0) _vStroke.Transparency=0.15 _vStroke.Parent=_valLabel local _vGrad=Instance.new("UIGradient") _vGrad.Color=_LayoutEngine.getSequence(os.clock()) _vGrad.Parent=_valLabel local _track=Instance.new("Frame") _track.Size=UDim2.new(1,0,0,6) _track.Position=UDim2.new(0,0,0,24) _track.BackgroundColor3=Color3.fromRGB(40,40,40) _track.BackgroundTransparency=0.2 _track.BorderSizePixel=0 _track.ZIndex=20 _track.Parent=_row Instance.new("UICorner",_track).CornerRadius=UDim.new(0,3) local _trGrad=Instance.new("UIGradient") _trGrad.Color=_LayoutEngine.getSequence(os.clock()) _trGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.5),NumberSequenceKeypoint.new(1,0.3)}) _trGrad.Parent=_track local _pct=math.clamp((_cfg[_key]-_mn)/(_mx-_mn),0,1) local _fill=Instance.new("Frame") _fill.Size=UDim2.new(_pct,0,1,0) _fill.BackgroundColor3=_ACCENT_COLOR _fill.BorderSizePixel=0 _fill.ZIndex=21 _fill.Parent=_track Instance.new("UICorner",_fill).CornerRadius=UDim.new(0,3) local _knob=Instance.new("TextButton") _knob.Size=UDim2.new(0,16,0,16) _knob.AnchorPoint=Vector2.new(0.5,0.5) _knob.Position=UDim2.new(_pct,0,0.5,0) _knob.BackgroundColor3=Color3.fromRGB(220,220,220) _knob.Text=""_knob.AutoButtonColor=false _knob.BorderSizePixel=0 _knob.ZIndex=23 _knob.Parent=_track Instance.new("UICorner",_knob).CornerRadius=UDim.new(1,0) local _kGrad=Instance.new("UIGradient") _kGrad.Color=_LayoutEngine.getSequence(os.clock()) _kGrad.Parent=_knob local _kStroke=Instance.new("UIStroke") _kStroke.Thickness=1.5 _kStroke.Color=Color3.fromRGB(6,3,12) _kStroke.Transparency=0.3 _kStroke.Parent=_knob local _dragging=false local function _setValue(_val) if _step>0 then _val=math.floor(_val/_step+0.5)*_step end _val=math.clamp(_val,_mn,_mx) _cfg[_key]=_val local _p=math.clamp((_val-_mn)/(_mx-_mn),0,1) _fill.Size=UDim2.new(_p,0,1,0) _knob.Position=UDim2.new(_p,0,0.5,0) _valLabel.Text=_step<1 and string.format("%.2f",_val) or tostring(math.floor(_val)) end _knob.InputBegan:Connect(function(_inp) if _inp.UserInputType==Enum.UserInputType.MouseButton1 then _dragging=true end end) table.insert(_connections,_InputAdapter.InputEnded:Connect(function(_inp) if _inp.UserInputType==Enum.UserInputType.MouseButton1 and _dragging then _dragging=false end end)) table.insert(_connections,_InputAdapter.InputChanged:Connect(function(_inp) if _dragging and _inp.UserInputType==Enum.UserInputType.MouseMovement then local _w=_track.AbsoluteSize.X if _w>0 then _setValue(_mn+math.clamp((_inp.Position.X-_track.AbsolutePosition.X)/_w,0,1)*(_mx-_mn)) end end end)) _track.InputBegan:Connect(function(_inp) if _inp.UserInputType==Enum.UserInputType.MouseButton1 then local _w=_track.AbsoluteSize.X if _w>0 then _setValue(_mn+math.clamp((_inp.Position.X-_track.AbsolutePosition.X)/_w,0,1)*(_mx-_mn)) end end end) end function _LayoutEngine.makeCycle(_pi,_text,_opts,_key,_cfg,_onChanged) local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,36) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.15 _row.BorderSizePixel=0 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.ClipsDescendants=true _row.Parent=_tabPages[_pi]Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8) local _rowGrad=Instance.new("UIGradient") _rowGrad.Color=_LayoutEngine.getSequence(os.clock()) _rowGrad.Rotation=20 _rowGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.65),NumberSequenceKeypoint.new(1,0.45)}) _rowGrad.Parent=_row local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(0.5,0,1,0) _lbl.Position=UDim2.new(0,12,0,0) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=11 _lbl.Font=Enum.Font.GothamSemibold _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.Parent=_row local _cStroke=Instance.new("UIStroke") _cStroke.Thickness=1.2 _cStroke.Color=Color3.new(0,0,0) _cStroke.Transparency=0.15 _cStroke.Parent=_lbl local _cGrad=Instance.new("UIGradient") _cGrad.Color=_LayoutEngine.getSequence(os.clock()) _cGrad.Parent=_lbl local _idx=_cfg[_key]or 1 local _valLabel=Instance.new("TextLabel") _valLabel.Text=tostring(_opts[_idx]) _valLabel.Size=UDim2.new(0.42,0,1,0) _valLabel.Position=UDim2.new(0.5,0,0,0) _valLabel.BackgroundTransparency=1 _valLabel.TextColor3=Color3.new(1,1,1) _valLabel.TextSize=11 _valLabel.Font=Enum.Font.GothamBold _valLabel.TextXAlignment=Enum.TextXAlignment.Right _valLabel.ZIndex=20 _valLabel.Parent=_row local _cvStroke=Instance.new("UIStroke") _cvStroke.Thickness=1.2 _cvStroke.Color=Color3.new(0,0,0) _cvStroke.Transparency=0.15 _cvStroke.Parent=_valLabel local _cvGrad=Instance.new("UIGradient") _cvGrad.Color=_LayoutEngine.getSequence(os.clock()) _cvGrad.Parent=_valLabel _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.3}):Play() end) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play() end) local _clickRegion=Instance.new("TextButton") _clickRegion.Size=UDim2.new(1,0,1,0) _clickRegion.BackgroundTransparency=1 _clickRegion.Text=""_clickRegion.ZIndex=22 _clickRegion.AutoButtonColor=false _clickRegion.Parent=_row _clickRegion.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Click",0.2,1.0) local _mpos=_InputAdapter:GetMouseLocation() _LayoutEngine.Ripple(_row,_mpos.X-_row.AbsolutePosition.X,_mpos.Y-_row.AbsolutePosition.Y) _idx=_idx%#_opts+1 _cfg[_key]=_idx _valLabel.Text=tostring(_opts[_idx]) if _onChanged then _onChanged(_idx) end end) end function _LayoutEngine.makeRebind(_pi,_text,_cfgKey,_cfg,_connections) _connections=_connections or{}local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,36) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.15 _row.BorderSizePixel=0 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.ClipsDescendants=true _row.Parent=_tabPages[_pi]Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8) local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(0.5,0,1,0) _lbl.Position=UDim2.new(0,12,0,0) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=11 _lbl.Font=Enum.Font.GothamSemibold _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.Parent=_row local _rStroke=Instance.new("UIStroke") _rStroke.Thickness=1.2 _rStroke.Color=Color3.new(0,0,0) _rStroke.Transparency=0.15 _rStroke.Parent=_lbl local _rGrad=Instance.new("UIGradient") _rGrad.Color=_LayoutEngine.getSequence(os.clock()) _rGrad.Parent=_lbl local _valLabel=Instance.new("TextLabel") _valLabel.Text="[ ".._cfg[_cfgKey].." ]"_valLabel.Size=UDim2.new(0.44,0,1,0) _valLabel.Position=UDim2.new(0.5,0,0,0) _valLabel.BackgroundTransparency=1 _valLabel.TextColor3=Color3.new(1,1,1) _valLabel.TextSize=12 _valLabel.Font=Enum.Font.GothamBold _valLabel.TextXAlignment=Enum.TextXAlignment.Right _valLabel.ZIndex=20 _valLabel.Parent=_row local _rvStroke=Instance.new("UIStroke") _rvStroke.Thickness=1.2 _rvStroke.Color=Color3.new(0,0,0) _rvStroke.Transparency=0.15 _rvStroke.Parent=_valLabel local _rvGrad=Instance.new("UIGradient") _rvGrad.Color=_LayoutEngine.getSequence(os.clock()) _rvGrad.Parent=_valLabel _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.3}):Play() end) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play() end) local _isRebinding=false local _clickRegion=Instance.new("TextButton") _clickRegion.Size=UDim2.new(1,0,1,0) _clickRegion.BackgroundTransparency=1 _clickRegion.Text=""_clickRegion.ZIndex=22 _clickRegion.AutoButtonColor=false _clickRegion.Parent=_row _clickRegion.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Click",0.2,1.0) _LayoutEngine.Ripple(_row,_row.AbsoluteSize.X/2,_row.AbsoluteSize.Y/2) _valLabel.Text="..."_isRebinding=true local _conn _conn=_InputAdapter.InputBegan:Connect(function(_inp) if _inp.UserInputType==Enum.UserInputType.Keyboard then local _keyName=_inp.KeyCode.Name if _keyName~="Unknown"then _cfg[_cfgKey]=_keyName _valLabel.Text="[ ".._keyName.." ]"_isRebinding=false pcall(function() _conn:Disconnect() end) _LayoutEngine.PlaySound("ToggleOn",0.2,1.3) end end end) task.delay(5,function() if _isRebinding then _isRebinding=false _valLabel.Text="[ ".._cfg[_cfgKey].." ]"pcall(function() _conn:Disconnect() end) end end) end) end function _LayoutEngine.makeInfo(_pi,_text) local _lbl=Instance.new("TextLabel") _lbl.Size=UDim2.new(1,-4,0,14) _lbl.BackgroundTransparency=1 _lbl.Text=_text _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=9 _lbl.Font=Enum.Font.Code _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.LayoutOrder=_nextOrder(_pi) _lbl.Parent=_tabPages[_pi]local _iStroke=Instance.new("UIStroke") _iStroke.Thickness=1.2 _iStroke.Color=Color3.new(0,0,0) _iStroke.Transparency=0.15 _iStroke.Parent=_lbl local _iGrad=Instance.new("UIGradient") _iGrad.Color=_LayoutEngine.getSequence(os.clock()) _iGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.15),NumberSequenceKeypoint.new(1,0.45)}) _iGrad.Parent=_lbl end function _LayoutEngine.makeLabel(_pi) local _lbl=Instance.new("TextLabel") _lbl.Text=""_lbl.Size=UDim2.new(1,-8,0,16) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=12 _lbl.Font=Enum.Font.GothamBold _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.LayoutOrder=_nextOrder(_pi) _lbl.Parent=_tabPages[_pi]local _lStroke=Instance.new("UIStroke") _lStroke.Thickness=1.2 _lStroke.Color=Color3.new(0,0,0) _lStroke.Transparency=0.15 _lStroke.Parent=_lbl local _lGrad=Instance.new("UIGradient") _lGrad.Color=_LayoutEngine.getSequence(os.clock()) _lGrad.Parent=_lbl return _lbl end function _LayoutEngine.makeButton(_pi,_text,_handler) local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,36) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.15 _row.BorderSizePixel=0 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.ClipsDescendants=true _row.Parent=_tabPages[_pi]Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8) local _rowGrad=Instance.new("UIGradient") _rowGrad.Color=_LayoutEngine.getSequence(os.clock()) _rowGrad.Rotation=20 _rowGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.6),NumberSequenceKeypoint.new(1,0.35)}) _rowGrad.Parent=_row local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(1,0,1,0) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=11 _lbl.Font=Enum.Font.GothamBold _lbl.TextXAlignment=Enum.TextXAlignment.Center _lbl.ZIndex=20 _lbl.Parent=_row local _bStroke=Instance.new("UIStroke") _bStroke.Thickness=1.2 _bStroke.Color=Color3.new(0,0,0) _bStroke.Transparency=0.15 _bStroke.Parent=_lbl local _bGrad2=Instance.new("UIGradient") _bGrad2.Color=_LayoutEngine.getSequence(os.clock()) _bGrad2.Parent=_lbl _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.25}):Play() end) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play() end) local _clickRegion=Instance.new("TextButton") _clickRegion.Size=UDim2.new(1,0,1,0) _clickRegion.BackgroundTransparency=1 _clickRegion.Text=""_clickRegion.ZIndex=22 _clickRegion.AutoButtonColor=false _clickRegion.Parent=_row _clickRegion.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Click",0.25,1.0) local _mpos=_InputAdapter:GetMouseLocation() _LayoutEngine.Ripple(_row,_mpos.X-_row.AbsolutePosition.X,_mpos.Y-_row.AbsolutePosition.Y) if _handler then _handler() end end) end local _menuOpen=false _LayoutEngine.isOpen=false local _savedMouseBehavior,_savedMouseIconEnabled function _LayoutEngine.openMenu(_cfg) _menuOpen=true _LayoutEngine.isOpen=true _mainWindow.Visible=true _focusDim.Visible=true _bgOverlay.Visible=true _crescentCanvas.Visible=true _enhanceBtn.Visible=true _winW,_winH=_LayoutEngine.getWS(_cfg) _focusDim.BackgroundTransparency=1 _bgOverlay.BackgroundTransparency=1 _AnimationService:Create(_focusDim,TweenInfo.new(0.3),{BackgroundTransparency=0.75}):Play() _AnimationService:Create(_bgOverlay,TweenInfo.new(0.35),{BackgroundTransparency=0.32}):Play() _mainWindow.Size=UDim2.new(0,_winW*0.88,0,_winH*0.88) _mainWindow.Position=UDim2.new(0.5,-_winW*0.44,0.5,-_winH*0.44) _mainWindow.BackgroundTransparency=0.5 _AnimationService:Create(_mainWindow,TweenInfo.new(0.35,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.new(0,_winW,0,_winH),Position=UDim2.new(0.5,-_winW/2,0.5,-_winH/2),BackgroundTransparency=0.08}):Play() _LayoutEngine.PlaySound("Open",0.28,1) pcall(function() _savedMouseBehavior=_InputAdapter.MouseBehavior _savedMouseIconEnabled=_InputAdapter.MouseIconEnabled _InputAdapter.MouseBehavior=Enum.MouseBehavior.Default _InputAdapter.MouseIconEnabled=true end) end function _LayoutEngine.closeMenu(_cfg) _menuOpen=false _LayoutEngine.isOpen=false _AnimationService:Create(_focusDim,TweenInfo.new(0.2),{BackgroundTransparency=1}):Play() _AnimationService:Create(_bgOverlay,TweenInfo.new(0.25),{BackgroundTransparency=1}):Play() _AnimationService:Create(_mainWindow,TweenInfo.new(0.25,Enum.EasingStyle.Quint,Enum.EasingDirection.In),{Size=UDim2.new(0,_winW*0.88,0,_winH*0.88),BackgroundTransparency=1}):Play() _LayoutEngine.PlaySound("Close",0.22,1) if _LayoutEngine._onMenuClose then _LayoutEngine._onMenuClose() end _enhanceBtn.Visible=false task.delay(0.3,function() if not _menuOpen then _mainWindow.Visible=false _focusDim.Visible=false _bgOverlay.Visible=false _crescentCanvas.Visible=false end end) pcall(function() if _savedMouseBehavior then _InputAdapter.MouseBehavior=_savedMouseBehavior end if _savedMouseIconEnabled~=nil then _InputAdapter.MouseIconEnabled=_savedMouseIconEnabled end end) end function _LayoutEngine.handleDrag(_inputPos) if _LayoutEngine._dragState.drag and _LayoutEngine._dragState.start and _LayoutEngine._dragState.pos then local _delta=_inputPos-_LayoutEngine._dragState.start _mainWindow.Position=UDim2.new(_LayoutEngine._dragState.pos.X.Scale,_LayoutEngine._dragState.pos.X.Offset+_delta.X,_LayoutEngine._dragState.pos.Y.Scale,_LayoutEngine._dragState.pos.Y.Offset+_delta.Y) end if _LayoutEngine._bfDrag.drag and _LayoutEngine._bfDrag.start and _LayoutEngine._bfDrag.pos then local _delta=_inputPos-_LayoutEngine._bfDrag.start _keybindPanel.Position=UDim2.new(_LayoutEngine._bfDrag.pos.X.Scale,_LayoutEngine._bfDrag.pos.X.Offset+_delta.X,_LayoutEngine._bfDrag.pos.Y.Scale,_LayoutEngine._bfDrag.pos.Y.Offset+_delta.Y) end end local _Renderer=_LayoutEngine do local _PlayerService=game:GetService("Players") local _InputAdapter=game:GetService("UserInputService") local _FrameService=game:GetService("RunService") local _RenderEnv=game:GetService("Lighting") local _DataSerializer=game:GetService("HttpService") local _ActiveUser=_PlayerService.LocalPlayer _InputAdapter.InputChanged:Connect(function(_input) if _input.UserInputType==Enum.UserInputType.MouseMovement then _Renderer.handleDrag(_input.Position) end end) _Renderer._fovCircle=nil _Renderer._fovVisible=false function _Renderer.createFOVCircle() if _Renderer._fovCircle then return _Renderer._fovCircle end local _ok,_circle=pcall(function() local _c=Drawing.new("Circle") _c.Thickness=1.5 _c.NumSides=360 _c.Radius=100 _c.Filled=false _c.Visible=false _c.Transparency=0.8 _c.Color=Color3.fromRGB(200,200,255) return _c end) if _ok and _circle then _Renderer._fovCircle=_circle return _circle end return nil end function _Renderer.updateFOVCircle(_prefs,_forceHide) local _circle=_Renderer._fovCircle or _Renderer.createFOVCircle() if not _circle then return end if _forceHide or _Renderer.isOpen or not _prefs.ShowFOV then _circle.Visible=false _Renderer._fovVisible=false return end local _cam=workspace.CurrentCamera if not _cam then _circle.Visible=false return end local _vp=_cam.ViewportSize local _centerX=_vp.X*0.5 local _centerY=_vp.Y*0.5 local _scale=math.min(_vp.X,_vp.Y)/1080 local _radius=(_prefs.FOVRadius or 100)*_scale _circle.Position=Vector2.new(_centerX,_centerY) _circle.Radius=_radius _circle.NumSides=360 _circle.Thickness=_prefs.FOVThickness or 1.5 _circle.Transparency=_prefs.FOVTransparency or 0.8 if _prefs.FOVMatchGUI then _circle.Color=_Renderer.getColor(os.clock(),0.5) else _circle.Color=_prefs.FOVColor or Color3.fromRGB(200,200,255) end _circle.Visible=true _Renderer._fovVisible=true end function _Renderer.hideFOVCircle() if _Renderer._fovCircle then _Renderer._fovCircle.Visible=false _Renderer._fovVisible=false end end _Renderer._espCache={}_Renderer._espEnabled=false local _TAG_PALETTE={Name=Color3.fromRGB(255,255,255),Health=Color3.fromRGB(100,255,100),Distance=Color3.fromRGB(200,200,255),Box=Color3.fromRGB(255,255,255),Tracer=Color3.fromRGB(200,200,255)}function _Renderer.createESPForPlayer(_targetPlayer) if _Renderer._espCache[_targetPlayer]then return _Renderer._espCache[_targetPlayer]end local _ok,_tagData=pcall(function() local _data={}
+local _LayoutEngine={}
+local _PlayerService=game:GetService("Players")
+local _AnimationService=game:GetService("TweenService")
+local _InputAdapter=game:GetService("UserInputService")
+local _RenderEnvironment=game:GetService("Lighting")
+local _AudioController=game:GetService("SoundService")
+local _DataSerializer=game:GetService("HttpService")
+local _ActiveUser=_PlayerService.LocalPlayer
+local _REF_WIDTH=1920
+local _REF_HEIGHT=1080
+local _ACCENT_COLOR=Color3.fromRGB(200,30,30)
+local _ACCENT_SEQ=ColorSequence.new(_ACCENT_COLOR)
+local _STROKE_COLOR=Color3.fromRGB(100,15,15)
+local _STROKE_SEQ=ColorSequence.new(_STROKE_COLOR)
+local _BG_COLOR=Color3.fromRGB(15,15,15)
+local _BRAND_COLOR=Color3.fromRGB(255,200,0) _LayoutEngine.UIConfigs={ThemeMode=1,CustomColors={Color3.fromRGB(200,200,255),Color3.fromRGB(100,100,200)},ColorSpeed=0.35,ColorIntensity=1,UITransparency=0.15,BackgroundAnimate=false,TopBarAnimate=false,ButtonMode=1,StrokeColor=Color3.new(0,0,0),StrokeTransparency=0.15,GradientEnabled=true} _LayoutEngine._uiConnections={} _LayoutEngine.themeCallbacks={}
+function _LayoutEngine.getColor(_elapsed,_shift)
+return _ACCENT_COLOR
+end
+function _LayoutEngine.getAuroraColor(_elapsed,_shift)
+return _ACCENT_COLOR
+end
+function _LayoutEngine.getSequence(_elapsed)
+return _ACCENT_SEQ
+end
+function _LayoutEngine.getAuroraSequence(_elapsed)
+return _ACCENT_SEQ
+end
+function _LayoutEngine.getStrokeColor(_elapsed,_shift)
+return _STROKE_COLOR
+end
+function _LayoutEngine.getStrokeSequence(_elapsed)
+return _STROKE_SEQ
+end
+_LayoutEngine.ColorEngine={GetColor=function(_t,_o)
+return _LayoutEngine.getColor(_t,_o)
+end
+,GetSequence=function(_t)
+return _LayoutEngine.getSequence(_t)
+end
+,GetStrokeColor=function(_t,_o)
+return _LayoutEngine.getStrokeColor(_t,_o)
+end
+,GetStrokeSequence=function(_t)
+return _LayoutEngine.getStrokeSequence(_t)
+end
+} _LayoutEngine.SoundIds={Click="rbxassetid://6026984224",Toggle="rbxassetid://6026984224",Open="rbxassetid://9120286436",Close="rbxassetid://9120286436",Notify="rbxassetid://6026984224",Kill="rbxassetid://9118823108",Tab="rbxassetid://6026984224",Rage="rbxassetid://6026984224",ToggleOn="rbxassetid://6026984224",ToggleOff="rbxassetid://6026984224",SliderTick="rbxassetid://6026984224"}
+local _audioCache={}
+function _LayoutEngine.PlaySound(_name,_vol,_spd)
+local _assetId=type(_name)=="string" and _LayoutEngine.SoundIds[_name] or _name
+if not _assetId then
+return
+end
+_vol=_vol or 0.35 _spd=_spd or 1
+local _cached=_audioCache[_assetId]
+if _cached and _cached.Parent then
+_cached.Volume=_vol _cached.PlaybackSpeed=_spd _cached:Play()
+return
+end
+local _snd=Instance.new("Sound") _snd.SoundId=_assetId _snd.Volume=_vol _snd.PlaybackSpeed=_spd _snd.RollOffMode=Enum.RollOffMode.Linear _snd.RollOffMaxDistance=0 _snd.Parent=_AudioController _audioCache[_assetId]=_snd pcall(function() _snd:Play()
+end
+)
+end
+local function _resolveParent(_guiObject)
+local _ok=false
+if gethui then
+_ok=pcall(function() _guiObject.Parent=gethui()
+end
+)
+end
+if not _ok then
+pcall(function() _guiObject.Parent=game.CoreGui
+end
+)
+end
+if not _guiObject.Parent then
+_guiObject.Parent=_ActiveUser:WaitForChild("PlayerGui")
+end
+end
+local _legacyNames={"MoonOverlay","MoonLoad","MoonGUI_Main","MoonGUI","SakuraGUI_v18","SakuraGUI_v19","SakuraGUI_v20","SakuraGUI"}
+for _,_guiName in ipairs(_legacyNames) do
+pcall(function()
+if game.CoreGui:FindFirstChild(_guiName) then
+game.CoreGui[_guiName]:Destroy()
+end
+end
+) pcall(function()
+if gethui and gethui():FindFirstChild(_guiName) then
+gethui()[_guiName]:Destroy()
+end
+end
+)
+end
+for _,_child in ipairs(_RenderEnvironment:GetChildren()) do
+if _child.Name:find("MoonBlur") or _child.Name:find("MoonLoadBlur") or _child.Name:find("SakuraMainBlur") then
+pcall(function() _child:Destroy()
+end
+)
+end
+end
+local _rootSurface=Instance.new("ScreenGui") _rootSurface.Name="MoonOverlay" _rootSurface.ResetOnSpawn=false _rootSurface.DisplayOrder=99999 _rootSurface.IgnoreGuiInset=true _resolveParent(_rootSurface) _LayoutEngine.screenGui=_rootSurface
+local _cachedScale,_scaleTimestamp=1,0
+function _LayoutEngine.getScale()
+if os.clock()-_scaleTimestamp<0.35 then
+return _cachedScale
+end
+local _cam=workspace.CurrentCamera
+if _cam then
+_cachedScale=math.clamp(math.min(_cam.ViewportSize.X/_REF_WIDTH,_cam.ViewportSize.Y/_REF_HEIGHT),0.4,4)
+end
+_scaleTimestamp=os.clock()
+return _cachedScale
+end
+function _LayoutEngine.S(_val)
+return _val*_LayoutEngine.getScale()
+end
+function _LayoutEngine.getVP()
+local _cam=workspace.CurrentCamera
+return _cam and _cam.ViewportSize or Vector2.new(_REF_WIDTH,_REF_HEIGHT)
+end
+function _LayoutEngine.getCenter()
+local _vp=_LayoutEngine.getVP()
+return _vp.X*0.5,_vp.Y*0.5
+end
+function _LayoutEngine.Ripple(_target,_px,_py)
+if not _target or not _target.Parent then
+return
+end
+local _circle=Instance.new("Frame") _circle.BackgroundColor3=_ACCENT_COLOR _circle.BackgroundTransparency=0.45 _circle.BorderSizePixel=0 _circle.ZIndex=(_target.ZIndex or 1)+5 _circle.AnchorPoint=Vector2.new(0.5,0.5) _circle.Position=UDim2.new(0,_px or 0,0,_py or 0) _circle.Size=UDim2.new(0,0,0,0) _circle.Parent=_target Instance.new("UICorner",_circle).CornerRadius=UDim.new(1,0)
+local _circleGrad=Instance.new("UIGradient") _circleGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _circleGrad.Rotation=math.random(0,360) _circleGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.55),NumberSequenceKeypoint.new(1,0.15)}) _circleGrad.Parent=_circle
+local _maxDim=math.max(_target.AbsoluteSize.X,_target.AbsoluteSize.Y)*2.5
+local _expandAnim=_AnimationService:Create(_circle,TweenInfo.new(0.55,Enum.EasingStyle.Quint),{Size=UDim2.new(0,_maxDim,0,_maxDim),BackgroundTransparency=1}) _expandAnim:Play() _expandAnim.Completed:Connect(function() pcall(function() _circle:Destroy()
+end
+)
+end
+)
+end
+local _toastContainer=Instance.new("Frame") _toastContainer.Size=UDim2.new(0,330,1,-40) _toastContainer.Position=UDim2.new(1,-350,0,20) _toastContainer.BackgroundTransparency=1 _toastContainer.ZIndex=200 _toastContainer.Parent=_rootSurface
+local _toastLayout=Instance.new("UIListLayout") _toastLayout.SortOrder=Enum.SortOrder.LayoutOrder _toastLayout.Padding=UDim.new(0,8) _toastLayout.VerticalAlignment=Enum.VerticalAlignment.Bottom _toastLayout.Parent=_toastContainer
+function _LayoutEngine.Notify(_heading,_body,_seconds,_accent) _seconds=_seconds or 4 _accent=_accent or _LayoutEngine.getColor(os.clock(),0) _LayoutEngine.PlaySound("Notify",0.24,1.03)
+local _card=Instance.new("Frame") _card.Size=UDim2.new(1,0,0,60) _card.BackgroundColor3=Color3.fromRGB(20,20,20) _card.BackgroundTransparency=0.12 _card.BorderSizePixel=0 _card.ClipsDescendants=true _card.ZIndex=201 _card.Parent=_toastContainer Instance.new("UICorner",_card).CornerRadius=UDim.new(0,10)
+local _cardGrad=Instance.new("UIGradient") _cardGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _cardGrad.Rotation=18 _cardGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.15)}) _cardGrad.Parent=_card
+local _cardStroke=Instance.new("UIStroke") _cardStroke.Thickness=1.2 _cardStroke.Color=_STROKE_COLOR _cardStroke.Transparency=0.1 _cardStroke.Parent=_card
+local _cardStGrad=Instance.new("UIGradient") _cardStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _cardStGrad.Parent=_cardStroke
+local _titleLine=Instance.new("TextLabel") _titleLine.Size=UDim2.new(1,-16,0,18) _titleLine.Position=UDim2.new(0,12,0,7) _titleLine.BackgroundTransparency=1 _titleLine.Text=_heading or"" _titleLine.TextColor3=Color3.new(1,1,1) _titleLine.TextSize=12 _titleLine.Font=Enum.Font.GothamBold _titleLine.TextXAlignment=Enum.TextXAlignment.Left _titleLine.ZIndex=202 _titleLine.Parent=_card
+local _tStroke=Instance.new("UIStroke") _tStroke.Thickness=1.2 _tStroke.Color=Color3.new(0,0,0) _tStroke.Transparency=0.15 _tStroke.Parent=_titleLine
+local _tGrad=Instance.new("UIGradient") _tGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _tGrad.Parent=_titleLine
+local _descLine=Instance.new("TextLabel") _descLine.Size=UDim2.new(1,-16,0,14) _descLine.Position=UDim2.new(0,12,0,29) _descLine.BackgroundTransparency=1 _descLine.Text=_body or"" _descLine.TextColor3=Color3.new(1,1,1) _descLine.TextSize=10 _descLine.Font=Enum.Font.Gotham _descLine.TextXAlignment=Enum.TextXAlignment.Left _descLine.ZIndex=202 _descLine.TextWrapped=true _descLine.Parent=_card
+local _dGrad=Instance.new("UIGradient") _dGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()+0.35) _dGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.1),NumberSequenceKeypoint.new(1,0.35)}) _dGrad.Parent=_descLine
+local _progressBar=Instance.new("Frame") _progressBar.Size=UDim2.new(1,0,0,2) _progressBar.Position=UDim2.new(0,0,1,-2) _progressBar.BorderSizePixel=0 _progressBar.BackgroundColor3=_accent _progressBar.ZIndex=202 _progressBar.Parent=_card
+local _pbGrad=Instance.new("UIGradient") _pbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _pbGrad.Parent=_progressBar _card.Position=UDim2.new(1,60,0,0) _AnimationService:Create(_card,TweenInfo.new(0.4,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Position=UDim2.new(0,0,0,0)}):Play()
+local _shrinkAnim=_AnimationService:Create(_progressBar,TweenInfo.new(_seconds,Enum.EasingStyle.Linear),{Size=UDim2.new(0,0,0,2)}) _shrinkAnim:Play() _shrinkAnim.Completed:Connect(function()
+local _dismissAnim=_AnimationService:Create(_card,TweenInfo.new(0.3,Enum.EasingStyle.Quint,Enum.EasingDirection.In),{Position=UDim2.new(1,60,0,0),BackgroundTransparency=1}) _dismissAnim:Play() _dismissAnim.Completed:Connect(function() pcall(function() _card:Destroy()
+end
+)
+end
+)
+end
+)
+end
+function _LayoutEngine.NotifyKill(_targetName) _LayoutEngine.PlaySound("Kill",0.4,1.0) _LayoutEngine.Notify("Kill","Eliminated "..tostring(_targetName),3,Color3.fromRGB(255,60,60))
+end
+local _statusBadge=Instance.new("Frame") _statusBadge.Size=UDim2.new(0,220,0,28) _statusBadge.Position=UDim2.new(0,20,0,20) _statusBadge.BackgroundColor3=_BG_COLOR _statusBadge.BackgroundTransparency=0.12 _statusBadge.BorderSizePixel=0 _statusBadge.ZIndex=100 _statusBadge.Parent=_rootSurface Instance.new("UICorner",_statusBadge).CornerRadius=UDim.new(0,8)
+local _sbGrad=Instance.new("UIGradient") _sbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _sbGrad.Rotation=15 _sbGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.42),NumberSequenceKeypoint.new(1,0.2)}) _sbGrad.Parent=_statusBadge _LayoutEngine._wmGrad=_sbGrad
+local _sbStroke=Instance.new("UIStroke") _sbStroke.Thickness=1 _sbStroke.Transparency=0.12 _sbStroke.Parent=_statusBadge
+local _sbStGrad=Instance.new("UIGradient") _sbStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _sbStGrad.Parent=_sbStroke _LayoutEngine._wmStGrad=_sbStGrad
+local _verLabel=Instance.new("TextLabel") _verLabel.Size=UDim2.new(0,100,1,0) _verLabel.Position=UDim2.new(0,10,0,0) _verLabel.BackgroundTransparency=1 _verLabel.Text="MOON v4.1" _verLabel.TextColor3=_BRAND_COLOR _verLabel.TextSize=11 _verLabel.Font=Enum.Font.GothamBold _verLabel.TextXAlignment=Enum.TextXAlignment.Left _verLabel.ZIndex=101 _verLabel.Parent=_statusBadge
+local _vlStroke=Instance.new("UIStroke") _vlStroke.Thickness=1.2 _vlStroke.Color=Color3.new(0,0,0) _vlStroke.Transparency=0.15 _vlStroke.Parent=_verLabel
+local _vlGrad=Instance.new("UIGradient") _vlGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _vlGrad.Parent=_verLabel _LayoutEngine._wmTitleGrad=_vlGrad
+local _clockLabel=Instance.new("TextLabel") _clockLabel.Size=UDim2.new(0,90,1,0) _clockLabel.Position=UDim2.new(1,-96,0,0) _clockLabel.BackgroundTransparency=1 _clockLabel.TextColor3=Color3.new(1,1,1) _clockLabel.TextSize=9 _clockLabel.Font=Enum.Font.Code _clockLabel.TextXAlignment=Enum.TextXAlignment.Right _clockLabel.ZIndex=101 _clockLabel.Text="" _clockLabel.Parent=_statusBadge
+local _clStroke=Instance.new("UIStroke") _clStroke.Thickness=1.1 _clStroke.Color=Color3.new(0,0,0) _clStroke.Transparency=0.15 _clStroke.Parent=_clockLabel
+local _clGrad=Instance.new("UIGradient") _clGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _clGrad.Parent=_clockLabel _LayoutEngine._wmTimeGrad=_clGrad _LayoutEngine.wmTime=_clockLabel
+function _LayoutEngine.showLoadingScreen()
+local _splashGui=Instance.new("ScreenGui") _splashGui.Name="MoonLoad" _splashGui.ResetOnSpawn=false _splashGui.DisplayOrder=100000 _splashGui.IgnoreGuiInset=true _resolveParent(_splashGui)
+local _blurRef=nil
+local _dimLayer=Instance.new("Frame") _dimLayer.Size=UDim2.new(1,0,1,0) _dimLayer.BackgroundColor3=Color3.new(0,0,0) _dimLayer.BackgroundTransparency=0.08 _dimLayer.BorderSizePixel=0 _dimLayer.Parent=_splashGui
+local _dimGrad=Instance.new("UIGradient") _dimGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _dimGrad.Rotation=30 _dimGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.18),NumberSequenceKeypoint.new(1,0)}) _dimGrad.Parent=_dimLayer
+local _splashCard=Instance.new("Frame") _splashCard.Size=UDim2.new(0,360,0,108) _splashCard.Position=UDim2.new(0.5,-180,0.5,-54) _splashCard.BackgroundColor3=_BG_COLOR _splashCard.BackgroundTransparency=1 _splashCard.BorderSizePixel=0 _splashCard.Parent=_splashGui Instance.new("UICorner",_splashCard).CornerRadius=UDim.new(0,14)
+local _scGrad=Instance.new("UIGradient") _scGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _scGrad.Rotation=20 _scGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.32),NumberSequenceKeypoint.new(1,0.16)}) _scGrad.Parent=_splashCard
+local _scStroke=Instance.new("UIStroke") _scStroke.Thickness=1.5 _scStroke.Transparency=1 _scStroke.Parent=_splashCard
+local _scStGrad=Instance.new("UIGradient") _scStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _scStGrad.Parent=_scStroke
+local _splashTitle=Instance.new("TextLabel") _splashTitle.Text="MOON" _splashTitle.Size=UDim2.new(1,0,0,24) _splashTitle.Position=UDim2.new(0,0,0,14) _splashTitle.BackgroundTransparency=1 _splashTitle.TextColor3=Color3.new(1,1,1) _splashTitle.TextTransparency=1 _splashTitle.TextSize=18 _splashTitle.Font=Enum.Font.GothamBold _splashTitle.TextXAlignment=Enum.TextXAlignment.Center _splashTitle.Parent=_splashCard
+local _stGrad=Instance.new("UIGradient") _stGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _stGrad.Parent=_splashTitle
+local _stageLabel=Instance.new("TextLabel") _stageLabel.Text="initializing..." _stageLabel.Size=UDim2.new(1,0,0,14) _stageLabel.Position=UDim2.new(0,0,0,44) _stageLabel.BackgroundTransparency=1 _stageLabel.TextColor3=Color3.new(1,1,1) _stageLabel.TextTransparency=1 _stageLabel.TextSize=10 _stageLabel.Font=Enum.Font.Gotham _stageLabel.TextXAlignment=Enum.TextXAlignment.Center _stageLabel.Parent=_splashCard
+local _slGrad=Instance.new("UIGradient") _slGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _slGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.15),NumberSequenceKeypoint.new(1,0.42)}) _slGrad.Parent=_stageLabel
+local _progressTrack=Instance.new("Frame") _progressTrack.Size=UDim2.new(0,0,0,3) _progressTrack.Position=UDim2.new(0.5,0,0,72) _progressTrack.AnchorPoint=Vector2.new(0.5,0) _progressTrack.BackgroundColor3=Color3.fromRGB(40,40,40) _progressTrack.BackgroundTransparency=0.7 _progressTrack.BorderSizePixel=0 _progressTrack.Parent=_splashCard Instance.new("UICorner",_progressTrack).CornerRadius=UDim.new(1,0)
+local _ptGrad=Instance.new("UIGradient") _ptGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _ptGrad.Parent=_progressTrack
+local _progressFill=Instance.new("Frame") _progressFill.Size=UDim2.new(0,0,1,0) _progressFill.BackgroundColor3=_ACCENT_COLOR _progressFill.BorderSizePixel=0 _progressFill.Parent=_progressTrack Instance.new("UICorner",_progressFill).CornerRadius=UDim.new(1,0)
+local _pfGrad=Instance.new("UIGradient") _pfGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _pfGrad.Parent=_progressFill
+local _pctLabel=Instance.new("TextLabel") _pctLabel.Text="0%" _pctLabel.Size=UDim2.new(1,0,0,12) _pctLabel.Position=UDim2.new(0,0,0,84) _pctLabel.BackgroundTransparency=1 _pctLabel.TextColor3=Color3.new(1,1,1) _pctLabel.TextTransparency=1 _pctLabel.TextSize=8 _pctLabel.Font=Enum.Font.Code _pctLabel.TextXAlignment=Enum.TextXAlignment.Center _pctLabel.Parent=_splashCard
+local _pcGrad=Instance.new("UIGradient") _pcGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _pcGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.2),NumberSequenceKeypoint.new(1,0.5)}) _pcGrad.Parent=_pctLabel _AnimationService:Create(_splashCard,TweenInfo.new(0.5,Enum.EasingStyle.Quint),{BackgroundTransparency=0.08}):Play() _AnimationService:Create(_scStroke,TweenInfo.new(0.5),{Transparency=0.14}):Play() _AnimationService:Create(_splashTitle,TweenInfo.new(0.5),{TextTransparency=0}):Play() _AnimationService:Create(_stageLabel,TweenInfo.new(0.5),{TextTransparency=0.15}):Play() _AnimationService:Create(_pctLabel,TweenInfo.new(0.5),{TextTransparency=0.3}):Play() _AnimationService:Create(_progressTrack,TweenInfo.new(0.4),{Size=UDim2.new(0,280,0,3),BackgroundTransparency=0.45}):Play()
+local _stages={{10,"initializing"},{20,"mapping"},{35,"patching"},{50,"injecting"},{65,"calibrating"},{80,"bypassing"},{92,"loading"},{100,"ready"}} coroutine.wrap(function() wait(0.6)
+for _,_stage in ipairs(_stages) do
+_pfGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _scStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _AnimationService:Create(_progressFill,TweenInfo.new(0.25,Enum.EasingStyle.Quint),{Size=UDim2.new(_stage[1]/100,0,1,0)}):Play() _stageLabel.Text=_stage[2] _pctLabel.Text=_stage[1].."%" wait(math.random(8,18)*0.01)
+end
+_stageLabel.Text="complete" _pctLabel.Text="100%" wait(0.4)
+for _,_elem in ipairs({_splashCard,_splashTitle,_stageLabel,_pctLabel,_progressFill,_progressTrack,_dimLayer}) do
+_AnimationService:Create(_elem,TweenInfo.new(0.3),{BackgroundTransparency=1}):Play()
+end
+_AnimationService:Create(_scStroke,TweenInfo.new(0.3),{Transparency=1}):Play() _AnimationService:Create(_splashTitle,TweenInfo.new(0.3),{TextTransparency=1}):Play() _AnimationService:Create(_stageLabel,TweenInfo.new(0.3),{TextTransparency=1}):Play() _AnimationService:Create(_pctLabel,TweenInfo.new(0.3),{TextTransparency=1}):Play() wait(0.4) pcall(function()
+if _blurRef then
+_blurRef:Destroy()
+end
+end
+) pcall(function() _splashGui:Destroy()
+end
+)
+end
+)()
+end
+_LayoutEngine._chamsCache={} _LayoutEngine._chamsEnabled=false
+function _LayoutEngine.createChams(_character,_tint)
+if not _character or not _character.Parent then
+return nil
+end
+local _existing=_LayoutEngine._chamsCache[_character]
+if _existing and _existing.Parent then
+_existing.FillColor=_tint or _LayoutEngine.getColor(os.clock(),0) _existing.OutlineColor=_tint or _LayoutEngine.getColor(os.clock(),1)
+return _existing
+end
+local _hl=Instance.new("Highlight") _hl.Name="MoonChams" _hl.FillColor=_tint or _LayoutEngine.getColor(os.clock(),0) _hl.FillTransparency=0.65 _hl.OutlineColor=_tint or _LayoutEngine.getColor(os.clock(),1) _hl.OutlineTransparency=0.1 _hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop _hl.Adornee=_character _hl.Parent=_character _LayoutEngine._chamsCache[_character]=_hl
+return _hl
+end
+function _LayoutEngine.removeChams(_character)
+local _hl=_LayoutEngine._chamsCache[_character]
+if _hl then
+pcall(function() _hl:Destroy()
+end
+) _LayoutEngine._chamsCache[_character]=nil
+end
+end
+function _LayoutEngine.removeAllChams()
+for _,_hl in pairs(_LayoutEngine._chamsCache) do
+pcall(function() _hl:Destroy()
+end
+)
+end
+_LayoutEngine._chamsCache={}
+end
+function _LayoutEngine.updateChams(_targets,_cfg)
+if not _cfg.ShowChams then
+if _LayoutEngine._chamsEnabled then
+_LayoutEngine.removeAllChams() _LayoutEngine._chamsEnabled=false
+end
+return
+end
+_LayoutEngine._chamsEnabled=true
+local _activeChars={}
+for _,_tg in ipairs(_targets) do
+if _tg.char and _tg.char.Parent then
+_activeChars[_tg.char]=true
+local _col=_LayoutEngine.getColor(os.clock(),0)
+local _hl=_LayoutEngine._chamsCache[_tg.char]
+if _hl and _hl.Parent then
+_hl.FillColor=_col _hl.OutlineColor=_LayoutEngine.getColor(os.clock(),1.5) _hl.FillTransparency=_cfg.ChamsFillTransparency or 0.65 _hl.OutlineTransparency=_cfg.ChamsOutlineTransparency or 0.1
+else
+_LayoutEngine.createChams(_tg.char,_col)
+end
+end
+end
+for _char,_hl in pairs(_LayoutEngine._chamsCache) do
+if not _activeChars[_char] then
+pcall(function() _hl:Destroy()
+end
+) _LayoutEngine._chamsCache[_char]=nil
+end
+end
+end
+_LayoutEngine.blurMain=nil
+local _appGui=Instance.new("ScreenGui") _appGui.Name="MoonGUI_Main" _appGui.ResetOnSpawn=false _appGui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling _appGui.DisplayOrder=999 _appGui.IgnoreGuiInset=true _resolveParent(_appGui) _LayoutEngine.gui=_appGui
+local _appScale=Instance.new("UIScale") _appScale.Parent=_appGui coroutine.wrap(function()
+while _appGui and _appGui.Parent do
+_appScale.Scale=math.clamp(math.min(_LayoutEngine.getVP().X/_REF_WIDTH,_LayoutEngine.getVP().Y/_REF_HEIGHT),0.5,3) wait(0.6)
+end
+end
+)()
+local _bgOverlay=Instance.new("Frame") _bgOverlay.Size=UDim2.new(1,0,1,0) _bgOverlay.BackgroundColor3=Color3.new(0,0,0) _bgOverlay.BackgroundTransparency=1 _bgOverlay.BorderSizePixel=0 _bgOverlay.ZIndex=7 _bgOverlay.Visible=false _bgOverlay.Parent=_appGui
+local _bgOvGrad=Instance.new("UIGradient") _bgOvGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _bgOvGrad.Rotation=30 _bgOvGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.2),NumberSequenceKeypoint.new(1,0)}) _bgOvGrad.Parent=_bgOverlay _LayoutEngine._fullAurora=_bgOverlay _LayoutEngine._fullAuroraGrad=_bgOvGrad
+local _focusDim=Instance.new("Frame") _focusDim.Size=UDim2.new(1,0,1,0) _focusDim.BackgroundColor3=Color3.new(0,0,0) _focusDim.BackgroundTransparency=1 _focusDim.BorderSizePixel=0 _focusDim.ZIndex=8 _focusDim.Visible=false _focusDim.Parent=_appGui _LayoutEngine.dimOverlay=_focusDim
+local _crescentCanvas=Instance.new("Frame") _crescentCanvas.Size=UDim2.new(0,120,0,120) _crescentCanvas.Position=UDim2.new(1,-148,0,90) _crescentCanvas.BackgroundTransparency=1 _crescentCanvas.ZIndex=150 _crescentCanvas.Visible=false _crescentCanvas.Parent=_rootSurface
+local _crescentOuter=Instance.new("Frame") _crescentOuter.Size=UDim2.new(0,70,0,70) _crescentOuter.Position=UDim2.new(0.5,-35,0.5,-35) _crescentOuter.BackgroundColor3=_BRAND_COLOR _crescentOuter.BackgroundTransparency=0.1 _crescentOuter.BorderSizePixel=0 _crescentOuter.ZIndex=151 _crescentOuter.Parent=_crescentCanvas Instance.new("UICorner",_crescentOuter).CornerRadius=UDim.new(1,0)
+local _coGrad=Instance.new("UIGradient") _coGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _coGrad.Parent=_crescentOuter _LayoutEngine._moonOuterGrad=_coGrad
+local _crescentCut=Instance.new("Frame") _crescentCut.Size=UDim2.new(0,58,0,58) _crescentCut.Position=UDim2.new(0.5,-18,0.5,-29) _crescentCut.BackgroundColor3=Color3.fromRGB(10,10,10) _crescentCut.BackgroundTransparency=0.05 _crescentCut.BorderSizePixel=0 _crescentCut.ZIndex=152 _crescentCut.Parent=_crescentCanvas Instance.new("UICorner",_crescentCut).CornerRadius=UDim.new(1,0) _LayoutEngine.moonCanvas=_crescentCanvas _LayoutEngine.moonOuter=_crescentOuter
+local _keybindPanel=Instance.new("Frame") _keybindPanel.Size=UDim2.new(0,188,0,28) _keybindPanel.Position=UDim2.new(1,-210,0,56) _keybindPanel.BackgroundColor3=_BG_COLOR _keybindPanel.BackgroundTransparency=0.05 _keybindPanel.BorderSizePixel=0 _keybindPanel.ZIndex=100 _keybindPanel.ClipsDescendants=true _keybindPanel.Parent=_rootSurface Instance.new("UICorner",_keybindPanel).CornerRadius=UDim.new(0,10)
+local _kpGrad=Instance.new("UIGradient") _kpGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _kpGrad.Rotation=20 _kpGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.28),NumberSequenceKeypoint.new(1,0.1)}) _kpGrad.Parent=_keybindPanel _LayoutEngine._bindsGrad=_kpGrad
+local _kpStroke=Instance.new("UIStroke") _kpStroke.Thickness=1 _kpStroke.Transparency=0.15 _kpStroke.Parent=_keybindPanel
+local _kpStGrad=Instance.new("UIGradient") _kpStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _kpStGrad.Parent=_kpStroke _LayoutEngine._bfStGrad=_kpStGrad
+local _kpTitle=Instance.new("TextLabel") _kpTitle.Size=UDim2.new(1,-10,0,16) _kpTitle.Position=UDim2.new(0,8,0,4) _kpTitle.BackgroundTransparency=1 _kpTitle.Text="BINDS" _kpTitle.TextColor3=Color3.new(1,1,1) _kpTitle.TextSize=9 _kpTitle.Font=Enum.Font.GothamBold _kpTitle.TextXAlignment=Enum.TextXAlignment.Left _kpTitle.ZIndex=101 _kpTitle.Parent=_keybindPanel
+local _ktStroke=Instance.new("UIStroke") _ktStroke.Thickness=1.2 _ktStroke.Color=Color3.new(0,0,0) _ktStroke.Transparency=0.15 _ktStroke.Parent=_kpTitle
+local _ktGrad=Instance.new("UIGradient") _ktGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _ktGrad.Parent=_kpTitle _LayoutEngine._bindsTitleGrad=_ktGrad
+local _kpContent=Instance.new("Frame") _kpContent.Size=UDim2.new(1,-10,1,-22) _kpContent.Position=UDim2.new(0,5,0,22) _kpContent.BackgroundTransparency=1 _kpContent.ZIndex=101 _kpContent.Parent=_keybindPanel
+local _kpLayout=Instance.new("UIListLayout") _kpLayout.Padding=UDim.new(0,3) _kpLayout.SortOrder=Enum.SortOrder.LayoutOrder _kpLayout.Parent=_kpContent _LayoutEngine._bfDrag={drag=false,start=nil,pos=nil} _keybindPanel.InputBegan:Connect(function(_input)
+if _input.UserInputType==Enum.UserInputType.MouseButton1 then
+_LayoutEngine._bfDrag.drag=true _LayoutEngine._bfDrag.start=_input.Position _LayoutEngine._bfDrag.pos=_keybindPanel.Position
+end
+end
+) _keybindPanel.InputEnded:Connect(function(_input)
+if _input.UserInputType==Enum.UserInputType.MouseButton1 then
+_LayoutEngine._bfDrag.drag=false
+end
+end
+) _LayoutEngine._bindsStateCache={} _LayoutEngine._lastBindsHash=""
+function _LayoutEngine.pushBindEvent(_text)
+local _evRow=Instance.new("Frame") _evRow.Size=UDim2.new(1,0,0,0) _evRow.BackgroundColor3=Color3.fromRGB(30,30,30) _evRow.BackgroundTransparency=0.16 _evRow.BorderSizePixel=0 _evRow.ZIndex=104 _evRow.ClipsDescendants=true _evRow.Parent=_kpContent Instance.new("UICorner",_evRow).CornerRadius=UDim.new(0,8)
+local _erGrad=Instance.new("UIGradient") _erGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _erGrad.Rotation=12 _erGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.28),NumberSequenceKeypoint.new(1,0.1)}) _erGrad.Parent=_evRow
+local _erLabel=Instance.new("TextLabel") _erLabel.Size=UDim2.new(1,-10,1,0) _erLabel.Position=UDim2.new(0,10,0,0) _erLabel.BackgroundTransparency=1 _erLabel.Text=_text _erLabel.TextColor3=Color3.new(1,1,1) _erLabel.TextSize=10 _erLabel.Font=Enum.Font.GothamBold _erLabel.TextXAlignment=Enum.TextXAlignment.Left _erLabel.TextTransparency=1 _erLabel.ZIndex=105 _erLabel.Parent=_evRow
+local _elGrad=Instance.new("UIGradient") _elGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _elGrad.Parent=_erLabel _AnimationService:Create(_evRow,TweenInfo.new(0.28,Enum.EasingStyle.Quint,Enum.EasingDirection.Out),{Size=UDim2.new(1,0,0,22)}):Play() _AnimationService:Create(_erLabel,TweenInfo.new(0.24),{TextTransparency=0}):Play() coroutine.wrap(function() wait(2.1) _AnimationService:Create(_erLabel,TweenInfo.new(0.2),{TextTransparency=1}):Play()
+local _collapseAnim=_AnimationService:Create(_evRow,TweenInfo.new(0.28,Enum.EasingStyle.Quint,Enum.EasingDirection.In),{Size=UDim2.new(1,0,0,0),BackgroundTransparency=1}) _collapseAnim:Play() _collapseAnim.Completed:Connect(function() pcall(function() _evRow:Destroy()
+end
+)
+end
+)
+end
+)()
+end
+function _LayoutEngine.updateActiveBinds(_cfg,_ctx,_assistActive,_lockActive,_rotActive,_enhancedMode)
+local _stateMap={{"Aimbot",_cfg.Enabled,"aim "..(_cfg.Enabled and"on" or"off").." ("..tostring(_cfg.AimKey or"?")..")"},{"Locking",_assistActive,"aim lock ("..tostring(_cfg.AimKey or"?")..")"},{"Target",_lockActive,"target on ("..tostring(_cfg.TargetKey or"?")..")"},{"Spin",_rotActive,"spin on"},{"Triggerbot",_cfg.Triggerbot,"trigger on"},{"ESP",_cfg.ShowESP,"esp on"},{"Chams",_cfg.ShowChams,"chams on"},{"Dash",_cfg.DashEnabled,"dash ready ("..tostring(_cfg.DashKey or"?")..")"},{"Rage",_enhancedMode,_enhancedMode and"rage mode enabled" or"rage mode disabled"},{"R.Dash",_cfg.RageDash,"rage dash on"},{"R.Target",_cfg.RageTarget,"rage target on"}}
+for _,_item in ipairs(_stateMap) do
+local _ck,_cur=_item[1],_item[2]
+if _LayoutEngine._bindsStateCache[_ck]==nil then
+_LayoutEngine._bindsStateCache[_ck]=_cur
+elseif _LayoutEngine._bindsStateCache[_ck]~=_cur then
+_LayoutEngine._bindsStateCache[_ck]=_cur
+if _cur then
+_LayoutEngine.pushBindEvent(_item[3])
+end
+end
+end
+for _,_child in ipairs(_kpContent:GetChildren()) do
+if _child:IsA("Frame") and _child.Name=="BindStateRow" then
+_child:Destroy()
+end
+end
+local _activeItems={}
+local function _addItem(_n,_a,_k) _activeItems[#_activeItems+1]={n=_n,a=_a,k=_k or""}
+end
+_addItem("Aimbot",_cfg.Enabled,_cfg.AimKey)
+if _assistActive then
+_addItem("Locking",true,_cfg.AimKey)
+end
+if _lockActive then
+_addItem("Target",true,_cfg.TargetKey)
+end
+if _rotActive then
+_addItem("Spin",true,"")
+end
+_addItem("Trigger",_cfg.Triggerbot,"") _addItem("ESP",_cfg.ShowESP,"") _addItem("Chams",_cfg.ShowChams,"") _addItem("Dash",_cfg.DashEnabled,_cfg.DashKey)
+if _enhancedMode then
+_addItem("Rage",true,"")
+end
+if _cfg.RageDash then
+_addItem("R.Dash",true,"")
+end
+if _cfg.RageTarget then
+_addItem("R.Target",true,"")
+end
+local _stateHash=""
+for _,_item in ipairs(_activeItems) do
+_stateHash=_stateHash.._item.n..tostring(_item.a).._item.k..";"
+end
+if _stateHash==_LayoutEngine._lastBindsHash then
+return
+end
+_LayoutEngine._lastBindsHash=_stateHash
+for _,_child in ipairs(_kpContent:GetChildren()) do
+if _child:IsA("Frame") and _child.Name=="BindStateRow" then
+_child:Destroy()
+end
+end
+for _idx,_item in ipairs(_activeItems) do
+local _row=Instance.new("Frame") _row.Name="BindStateRow" _row.Size=UDim2.new(1,0,0,18) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.1 _row.BorderSizePixel=0 _row.ZIndex=102 _row.LayoutOrder=1000+_idx _row.Parent=_kpContent Instance.new("UICorner",_row).CornerRadius=UDim.new(0,7)
+local _rLabel=Instance.new("TextLabel") _rLabel.Size=UDim2.new(1,-10,1,0) _rLabel.Position=UDim2.new(0,8,0,0) _rLabel.BackgroundTransparency=1 _rLabel.Text=_item.k~="" and(_item.n.." (".._item.k..")") or _item.n _rLabel.TextColor3=Color3.new(1,1,1) _rLabel.TextSize=9 _rLabel.Font=Enum.Font.GothamBold _rLabel.TextXAlignment=Enum.TextXAlignment.Left _rLabel.ZIndex=103 _rLabel.Parent=_row
+end
+_keybindPanel.Size=UDim2.new(0,188,0,math.min(math.max(28+#_activeItems*21,28)+8,240))
+end
+_LayoutEngine.bindsFrame=_keybindPanel
+local _HUD_LINES=18
+local _hudPanel=Instance.new("Frame") _hudPanel.Size=UDim2.new(0,220,0,180) _hudPanel.Position=UDim2.new(0,20,0.5,-90) _hudPanel.BackgroundColor3=_BG_COLOR _hudPanel.BackgroundTransparency=0.05 _hudPanel.BorderSizePixel=0 _hudPanel.ZIndex=5 _hudPanel.Visible=false _hudPanel.ClipsDescendants=true _hudPanel.Parent=_appGui Instance.new("UICorner",_hudPanel).CornerRadius=UDim.new(0,10)
+local _hpGrad=Instance.new("UIGradient") _hpGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _hpGrad.Rotation=15 _hpGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.18)}) _hpGrad.Parent=_hudPanel _LayoutEngine._hudGrad=_hpGrad
+local _hpStroke=Instance.new("UIStroke") _hpStroke.Thickness=1 _hpStroke.Transparency=0.18 _hpStroke.Parent=_hudPanel
+local _hpStGrad=Instance.new("UIGradient") _hpStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _hpStGrad.Parent=_hpStroke _LayoutEngine._hudStGrad=_hpStGrad Instance.new("UIListLayout",_hudPanel).Padding=UDim.new(0,2)
+local _hudPad=Instance.new("UIPadding") _hudPad.PaddingTop=UDim.new(0,7) _hudPad.PaddingLeft=UDim.new(0,10) _hudPad.PaddingRight=UDim.new(0,10) _hudPad.PaddingBottom=UDim.new(0,7) _hudPad.Parent=_hudPanel
+local _hudLabels={}
+for _i=1,_HUD_LINES do
+local _line=Instance.new("TextLabel") _line.Size=UDim2.new(1,0,0,13) _line.BackgroundTransparency=1 _line.TextXAlignment=Enum.TextXAlignment.Left _line.Font=Enum.Font.GothamBold _line.TextSize=10 _line.Visible=false _line.ZIndex=6 _line.TextColor3=Color3.new(1,1,1) _line.Text="" _line.Parent=_hudPanel
+local _lineGrad=Instance.new("UIGradient") _lineGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()+_i*0.1) _lineGrad.Parent=_line _hudLabels[_i]=_line
+end
+_LayoutEngine.hudFrame=_hudPanel _LayoutEngine.hudT=_hudLabels _LayoutEngine.HUD_MAX=_HUD_LINES
+local _WINDOW_PRESETS={{w=860,h=580},{w=680,h=460},{w=1120,h=700}} _LayoutEngine.WIN_MODES=_WINDOW_PRESETS
+function _LayoutEngine.getWS(_cfg)
+local _preset=_WINDOW_PRESETS[_cfg.WindowMode] or _WINDOW_PRESETS[1]
+return _preset.w,_preset.h
+end
+local _winW,_winH=860,580
+local _mainWindow=Instance.new("Frame") _mainWindow.Name="W" _mainWindow.Size=UDim2.new(0,_winW,0,_winH) _mainWindow.Position=UDim2.new(0.5,-_winW/2,0.5,-_winH/2) _mainWindow.BackgroundColor3=Color3.fromRGB(10,10,10) _mainWindow.BackgroundTransparency=0.05 _mainWindow.BorderSizePixel=0 _mainWindow.Visible=false _mainWindow.ZIndex=10 _mainWindow.ClipsDescendants=true _mainWindow.Parent=_appGui Instance.new("UICorner",_mainWindow).CornerRadius=UDim.new(0,14)
+local _mwGrad=Instance.new("UIGradient") _mwGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _mwGrad.Rotation=20 _mwGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.65),NumberSequenceKeypoint.new(1,0.3)}) _mwGrad.Parent=_mainWindow _LayoutEngine._mainGrad=_mwGrad
+local _mwStroke=Instance.new("UIStroke") _mwStroke.Thickness=1.5 _mwStroke.Transparency=0.08 _mwStroke.Parent=_mainWindow
+local _mwStGrad=Instance.new("UIGradient") _mwStGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _mwStGrad.Parent=_mwStroke _LayoutEngine._gStGrad=_mwStGrad _LayoutEngine.W=_mainWindow _LayoutEngine.gSt=_mwStroke
+local _enhancedOverlay=Instance.new("Frame") _enhancedOverlay.Size=UDim2.new(1,0,1,0) _enhancedOverlay.BackgroundColor3=_ACCENT_COLOR _enhancedOverlay.BackgroundTransparency=1 _enhancedOverlay.BorderSizePixel=0 _enhancedOverlay.ZIndex=10 _enhancedOverlay.Parent=_mainWindow
+local _eoGrad=Instance.new("UIGradient") _eoGrad.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(255,60,90)),ColorSequenceKeypoint.new(0.5,Color3.fromRGB(180,50,150)),ColorSequenceKeypoint.new(1,Color3.fromRGB(255,120,120))}) _eoGrad.Rotation=45 _eoGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.12)}) _eoGrad.Parent=_enhancedOverlay _LayoutEngine._rageOverlay=_enhancedOverlay
+local _starDecor={}
+for _i=1,24 do
+local _star=Instance.new("Frame")
+local _sz=math.random(1,2) _star.Size=UDim2.new(0,_sz,0,_sz) _star.Position=UDim2.new(0,math.random(10,_winW-10),0,math.random(60,_winH-10)) _star.BackgroundColor3=_ACCENT_COLOR _star.BackgroundTransparency=math.random(50,80)/100 _star.BorderSizePixel=0 _star.ZIndex=11 _star.Parent=_mainWindow Instance.new("UICorner",_star).CornerRadius=UDim.new(1,0) _starDecor[_i]=_star
+end
+_LayoutEngine.guiStars=_starDecor
+local _headerBar=Instance.new("Frame") _headerBar.Size=UDim2.new(1,0,0,48) _headerBar.BackgroundColor3=Color3.fromRGB(20,20,20) _headerBar.BackgroundTransparency=0.05 _headerBar.BorderSizePixel=0 _headerBar.ZIndex=12 _headerBar.Parent=_mainWindow Instance.new("UICorner",_headerBar).CornerRadius=UDim.new(0,14)
+local _hbGrad=Instance.new("UIGradient") _hbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _hbGrad.Rotation=20 _hbGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.18)}) _hbGrad.Parent=_headerBar _LayoutEngine._titleBarGrad=_hbGrad _LayoutEngine.tB=_headerBar
+local _headerAccent=Instance.new("Frame") _headerAccent.Size=UDim2.new(1,0,0,2) _headerAccent.Position=UDim2.new(0,0,1,-2) _headerAccent.BackgroundColor3=_ACCENT_COLOR _headerAccent.BackgroundTransparency=0.08 _headerAccent.BorderSizePixel=0 _headerAccent.ZIndex=14 _headerAccent.Parent=_headerBar
+local _haGrad=Instance.new("UIGradient") _haGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _haGrad.Parent=_headerAccent _LayoutEngine._tLGrad=_haGrad
+local _brandBtn=Instance.new("Frame") _brandBtn.Size=UDim2.new(0,96,0,30) _brandBtn.Position=UDim2.new(0,10,0.5,-15) _brandBtn.BackgroundColor3=_ACCENT_COLOR _brandBtn.BackgroundTransparency=0.05 _brandBtn.BorderSizePixel=0 _brandBtn.ZIndex=15 _brandBtn.ClipsDescendants=true _brandBtn.Parent=_headerBar Instance.new("UICorner",_brandBtn).CornerRadius=UDim.new(0,8)
+local _bbGrad=Instance.new("UIGradient") _bbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _bbGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.3),NumberSequenceKeypoint.new(1,0.14)}) _bbGrad.Parent=_brandBtn _LayoutEngine._moonBtnGrad=_bbGrad
+local _brandLabel=Instance.new("TextLabel") _brandLabel.Size=UDim2.new(1,0,1,0) _brandLabel.BackgroundTransparency=1 _brandLabel.Text="MOON" _brandLabel.TextColor3=_BRAND_COLOR _brandLabel.TextSize=13 _brandLabel.Font=Enum.Font.GothamBold _brandLabel.ZIndex=16 _brandLabel.Parent=_brandBtn
+local _blStroke=Instance.new("UIStroke") _blStroke.Thickness=1.2 _blStroke.Color=Color3.new(0,0,0) _blStroke.Transparency=0.1 _blStroke.Parent=_brandLabel
+local _blGrad=Instance.new("UIGradient") _blGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _blGrad.Parent=_brandLabel _LayoutEngine._moonBtnTxtGrad=_blGrad _LayoutEngine.moonBtnTxt=_brandLabel
+local _stateBadge=Instance.new("TextLabel") _stateBadge.Text="OFF" _stateBadge.Size=UDim2.new(0,62,0,24) _stateBadge.Position=UDim2.new(0,116,0.5,-12) _stateBadge.BackgroundColor3=_ACCENT_COLOR _stateBadge.BackgroundTransparency=0.05 _stateBadge.TextColor3=Color3.new(1,1,1) _stateBadge.TextSize=10 _stateBadge.Font=Enum.Font.GothamBold _stateBadge.BorderSizePixel=0 _stateBadge.ZIndex=15 _stateBadge.Parent=_headerBar Instance.new("UICorner",_stateBadge).CornerRadius=UDim.new(0,6)
+local _sbdGrad=Instance.new("UIGradient") _sbdGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _sbdGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.3),NumberSequenceKeypoint.new(1,0.14)}) _sbdGrad.Parent=_stateBadge
+local _sbdStroke=Instance.new("UIStroke") _sbdStroke.Thickness=1 _sbdStroke.Color=Color3.new(0,0,0) _sbdStroke.Transparency=0.2 _sbdStroke.Parent=_stateBadge _LayoutEngine._statusGrad=_sbdGrad _LayoutEngine.guiStatus=_stateBadge
+local function _createMetricLabel(_text,_width,_xPos)
+local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(0,_width,0,14) _lbl.Position=UDim2.new(0,_xPos,0.5,-7) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=9 _lbl.Font=Enum.Font.Code _lbl.ZIndex=15 _lbl.Parent=_headerBar
+local _mStroke=Instance.new("UIStroke") _mStroke.Thickness=1 _mStroke.Color=Color3.new(0,0,0) _mStroke.Transparency=0.15 _mStroke.Parent=_lbl
+local _mGrad=Instance.new("UIGradient") _mGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _mGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.1),NumberSequenceKeypoint.new(1,0.35)}) _mGrad.Parent=_lbl
+return _lbl,_mGrad
+end
+local _fpsMetric,_fpsGrad=_createMetricLabel("60",54,188) _LayoutEngine._fpsGrad=_fpsGrad _LayoutEngine.guiFPS=_fpsMetric
+local _statsMetric,_statsGrad=_createMetricLabel("0 kills",60,246) _LayoutEngine._killsGrad=_statsGrad _LayoutEngine.guiKills=_statsMetric
+local _pingMetric,_pingGrad=_createMetricLabel("0ms",50,310) _LayoutEngine._pingGrad=_pingGrad _LayoutEngine.guiPing=_pingMetric
+local _isMinimized=false _LayoutEngine._dragState={drag=false,start=nil,pos=nil} _LayoutEngine._onClose=nil _LayoutEngine._onRageToggle=nil
+local function _createHeaderButton(_label,_xOffset,_handler)
+local _btn=Instance.new("TextButton") _btn.Text=_label _btn.Size=UDim2.new(0,32,0,26) _btn.Position=UDim2.new(1,_xOffset,0.5,-13) _btn.BackgroundColor3=Color3.fromRGB(40,40,40) _btn.BackgroundTransparency=0.05 _btn.TextColor3=Color3.new(1,1,1) _btn.TextSize=13 _btn.Font=Enum.Font.GothamBold _btn.BorderSizePixel=0 _btn.ZIndex=16 _btn.ClipsDescendants=true _btn.AutoButtonColor=false _btn.Parent=_headerBar Instance.new("UICorner",_btn).CornerRadius=UDim.new(0,7)
+local _btnGrad=Instance.new("UIGradient") _btnGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _btnGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.3),NumberSequenceKeypoint.new(1,0.15)}) _btnGrad.Parent=_btn _btn.MouseEnter:Connect(function() _AnimationService:Create(_btn,TweenInfo.new(0.2),{BackgroundTransparency=0.02}):Play()
+end
+) _btn.MouseLeave:Connect(function() _AnimationService:Create(_btn,TweenInfo.new(0.2),{BackgroundTransparency=0.12}):Play()
+end
+) _btn.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Click",0.25,1) _LayoutEngine.Ripple(_btn,_btn.AbsoluteSize.X/2,_btn.AbsoluteSize.Y/2)
+if _handler then
+_handler()
+end
+end
+)
+return _btn,_btnGrad
+end
+local _closeBtn,_closeBtnGrad=_createHeaderButton("\195\151",-38,function()
+if _LayoutEngine._onClose then
+_LayoutEngine._onClose()
+else
+_LayoutEngine.closeMenu({WindowMode=1}) _LayoutEngine.destroy()
+end
+end
+) _LayoutEngine._closeBtn=_closeBtn _LayoutEngine._closeBtnG=_closeBtnGrad
+local _minBtn,_minBtnGrad=_createHeaderButton("\226\128\148",-74,function() _isMinimized=not _isMinimized _AnimationService:Create(_mainWindow,TweenInfo.new(0.35,Enum.EasingStyle.Quint),{Size=_isMinimized and UDim2.new(0,_winW,0,48) or UDim2.new(0,_winW,0,_winH)}):Play()
+end
+) _LayoutEngine._minBtnG=_minBtnGrad
+local _enhanceBtn=Instance.new("TextButton") _enhanceBtn.Size=UDim2.new(0,98,0,28) _enhanceBtn.Position=UDim2.new(0,18,1,-50) _enhanceBtn.BackgroundColor3=Color3.fromRGB(180,30,30) _enhanceBtn.BackgroundTransparency=0.1 _enhanceBtn.Text="RAGE" _enhanceBtn.TextColor3=Color3.new(1,1,1) _enhanceBtn.TextSize=11 _enhanceBtn.Font=Enum.Font.GothamBold _enhanceBtn.BorderSizePixel=0 _enhanceBtn.ZIndex=50 _enhanceBtn.Visible=true _enhanceBtn.AutoButtonColor=false _enhanceBtn.ClipsDescendants=true _enhanceBtn.Parent=_appGui Instance.new("UICorner",_enhanceBtn).CornerRadius=UDim.new(0,8)
+local _ebGrad=Instance.new("UIGradient") _ebGrad.Color=ColorSequence.new({ColorSequenceKeypoint.new(0,Color3.fromRGB(255,60,90)),ColorSequenceKeypoint.new(0.5,Color3.fromRGB(180,50,150)),ColorSequenceKeypoint.new(1,Color3.fromRGB(255,120,120))}) _ebGrad.Rotation=20 _ebGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.28),NumberSequenceKeypoint.new(1,0.1)}) _ebGrad.Parent=_enhanceBtn _LayoutEngine.rageBtn=_enhanceBtn _LayoutEngine._rageBtnGrad=_ebGrad _enhanceBtn.MouseEnter:Connect(function() _AnimationService:Create(_enhanceBtn,TweenInfo.new(0.2),{BackgroundTransparency=0.02}):Play()
+end
+) _enhanceBtn.MouseLeave:Connect(function() _AnimationService:Create(_enhanceBtn,TweenInfo.new(0.2),{BackgroundTransparency=0.1}):Play()
+end
+) _enhanceBtn.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Rage",0.28,1) _LayoutEngine.Ripple(_enhanceBtn,_enhanceBtn.AbsoluteSize.X/2,_enhanceBtn.AbsoluteSize.Y/2)
+if _LayoutEngine._onRageToggle then
+_LayoutEngine._onRageToggle()
+end
+end
+) _headerBar.InputBegan:Connect(function(_inp)
+if _inp.UserInputType==Enum.UserInputType.MouseButton1 then
+_LayoutEngine._dragState.drag=true _LayoutEngine._dragState.start=_inp.Position _LayoutEngine._dragState.pos=_mainWindow.Position
+end
+end
+) _headerBar.InputEnded:Connect(function(_inp)
+if _inp.UserInputType==Enum.UserInputType.MouseButton1 then
+_LayoutEngine._dragState.drag=false
+end
+end
+)
+local _contentBody=Instance.new("Frame") _contentBody.Size=UDim2.new(1,0,1,-48) _contentBody.Position=UDim2.new(0,0,0,48) _contentBody.BackgroundTransparency=1 _contentBody.BorderSizePixel=0 _contentBody.ZIndex=11 _contentBody.Parent=_mainWindow
+local _tabStrip=Instance.new("Frame") _tabStrip.Size=UDim2.new(1,0,0,36) _tabStrip.BackgroundColor3=Color3.fromRGB(20,20,20) _tabStrip.BackgroundTransparency=0.05 _tabStrip.BorderSizePixel=0 _tabStrip.ZIndex=13 _tabStrip.Parent=_contentBody
+local _tsGrad=Instance.new("UIGradient") _tsGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _tsGrad.Rotation=10 _tsGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.35),NumberSequenceKeypoint.new(1,0.18)}) _tsGrad.Parent=_tabStrip _LayoutEngine._tabBarGrad=_tsGrad
+local _tabIndicator=Instance.new("Frame") _tabIndicator.Size=UDim2.new(0,0,0,2) _tabIndicator.Position=UDim2.new(0,0,1,-2) _tabIndicator.BackgroundColor3=_ACCENT_COLOR _tabIndicator.BorderSizePixel=0 _tabIndicator.ZIndex=15 _tabIndicator.Parent=_tabStrip
+local _tiGrad=Instance.new("UIGradient") _tiGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()) _tiGrad.Parent=_tabIndicator _LayoutEngine._tabIndGrad=_tiGrad _LayoutEngine.tabInd=_tabIndicator
+local _tabContent=Instance.new("Frame") _tabContent.Size=UDim2.new(1,0,1,-36) _tabContent.Position=UDim2.new(0,0,0,36) _tabContent.BackgroundTransparency=1 _tabContent.BorderSizePixel=0 _tabContent.ZIndex=12 _tabContent.Parent=_contentBody _LayoutEngine.NormalTabs={"Combat","Visual","Binds","UI","Cfg","Patch"} _LayoutEngine.RageTabs={"Combat","Visual","Movement","Binds","UI","Cfg","Patch"}
+local _tabButtons,_tabPages,_pageOrders={},{},{}
+local _activeTab,_currentTabs=1,{}
+local _isEnhancedMode=false _LayoutEngine.isRageMode=false
+for _i=1,7 do
+local _page=Instance.new("ScrollingFrame") _page.Name="P".._i _page.Size=UDim2.new(1,0,1,0) _page.BackgroundTransparency=1 _page.ScrollBarThickness=3 _page.ScrollBarImageColor3=Color3.fromRGB(255,255,255) _page.ScrollBarImageTransparency=0.35 _page.CanvasSize=UDim2.new(0,0,0,0) _page.BorderSizePixel=0 _page.Visible=false _page.ZIndex=13 _page.ScrollingDirection=Enum.ScrollingDirection.Y _page.Parent=_tabContent
+local _pageLayout=Instance.new("UIListLayout") _pageLayout.Padding=UDim.new(0,4) _pageLayout.SortOrder=Enum.SortOrder.LayoutOrder _pageLayout.Parent=_page _pageLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function() _page.CanvasSize=UDim2.new(0,0,0,_pageLayout.AbsoluteContentSize.Y+20)
+end
+)
+local _pagePad=Instance.new("UIPadding") _pagePad.PaddingTop=UDim.new(0,10) _pagePad.PaddingLeft=UDim.new(0,16) _pagePad.PaddingRight=UDim.new(0,16) _pagePad.PaddingBottom=UDim.new(0,16) _pagePad.Parent=_page _tabPages[_i]=_page _pageOrders[_i]=0
+end
+local function _nextOrder(_pi) _pageOrders[_pi]=_pageOrders[_pi]+1
+return _pageOrders[_pi]
+end
+function _LayoutEngine.getMappedPage(_tabIdx,_enhanced)
+if _enhanced then
+return _tabIdx
+end
+if _tabIdx<=2 then
+return _tabIdx
+end
+if _tabIdx==3 then
+return 4
+end
+if _tabIdx==4 then
+return 5
+end
+if _tabIdx==5 then
+return 6
+end
+return 7
+end
+local function _rebuildTabButtons()
+for _,_btn in ipairs(_tabButtons) do
+if _btn then
+_btn:Destroy()
+end
+end
+table.clear(_tabButtons) _currentTabs=_isEnhancedMode and _LayoutEngine.RageTabs or _LayoutEngine.NormalTabs _LayoutEngine.TabNames=_currentTabs
+local _count=#_currentTabs
+local _btnWidth=math.floor(_winW/_count)
+for _i,_name in ipairs(_currentTabs) do
+local _btn=Instance.new("TextButton") _btn.Text=_name _btn.Size=UDim2.new(0,_btnWidth,1,0) _btn.Position=UDim2.new(0,(_i-1)*_btnWidth,0,0) _btn.BackgroundTransparency=1 _btn.TextColor3=Color3.new(1,1,1) _btn.TextSize=11 _btn.Font=Enum.Font.GothamBold _btn.BorderSizePixel=0 _btn.AutoButtonColor=false _btn.ZIndex=15 _btn.Parent=_tabStrip
+local _tbGrad=Instance.new("UIGradient") _tbGrad.Color=_LayoutEngine.getAuroraSequence(os.clock()+_i*0.2) _tbGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.02),NumberSequenceKeypoint.new(1,0.14)}) _tbGrad.Parent=_btn _btn.MouseEnter:Connect(function()
+if _activeTab~=_i then
+_AnimationService:Create(_btn,TweenInfo.new(0.15),{TextTransparency=0.1}):Play()
+end
+end
+) _btn.MouseLeave:Connect(function()
+if _activeTab~=_i then
+_AnimationService:Create(_btn,TweenInfo.new(0.15),{TextTransparency=0.35}):Play()
+end
+end
+) _btn.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Tab",0.22,1.02) _activeTab=_i
+for _pi=1,7 do
+_tabPages[_pi].Visible=false
+end
+_tabPages[_LayoutEngine.getMappedPage(_i,_isEnhancedMode)].Visible=true
+for _bi,_bb in ipairs(_tabButtons) do
+_AnimationService:Create(_bb,TweenInfo.new(0.25,Enum.EasingStyle.Quint),{TextTransparency=(_bi==_i) and 0 or 0.35}):Play()
+end
+_AnimationService:Create(_tabIndicator,TweenInfo.new(0.35,Enum.EasingStyle.Quint),{Position=UDim2.new(0,(_i-1)*_btnWidth+8,1,-2),Size=UDim2.new(0,_btnWidth-16,0,2)}):Play()
+end
+) _btn.TextTransparency=_i==_activeTab and 0 or 0.35 _tabButtons[_i]=_btn
+end
+for _pi=1,7 do
+_tabPages[_pi].Visible=false
+end
+_tabPages[_LayoutEngine.getMappedPage(_activeTab,_isEnhancedMode)].Visible=true
+local _w=math.floor(_winW/#_currentTabs) _tabIndicator.Size=UDim2.new(0,_w-16,0,2) _tabIndicator.Position=UDim2.new(0,(_activeTab-1)*_w+8,1,-2)
+end
+function _LayoutEngine.setRageMode(_state) _state=not not _state _isEnhancedMode=_state _LayoutEngine.isRageMode=_state _AnimationService:Create(_enhancedOverlay,TweenInfo.new(0.35,Enum.EasingStyle.Quint),{BackgroundTransparency=_state and 0.88 or 1}):Play() _AnimationService:Create(_bgOverlay,TweenInfo.new(0.35,Enum.EasingStyle.Quint),{BackgroundTransparency=_state and 0.18 or 0.32}):Play() _enhanceBtn.Text=_state and"RAGE ON" or"RAGE" _brandLabel.Text=_state and"MOON R" or"MOON"
+if _activeTab>#(_state and _LayoutEngine.RageTabs or _LayoutEngine.NormalTabs) then
+_activeTab=1
+end
+_rebuildTabButtons()
+end
+_LayoutEngine.tPs=_tabPages _LayoutEngine.tBs=_tabButtons _LayoutEngine.refreshTabs=_rebuildTabButtons _rebuildTabButtons()
+function _LayoutEngine.makeSection(_pi,_text)
+local _frame=Instance.new("Frame") _frame.Size=UDim2.new(1,-4,0,26) _frame.BackgroundTransparency=1 _frame.LayoutOrder=_nextOrder(_pi) _frame.ZIndex=18 _frame.Parent=_tabPages[_pi]
+local _label=Instance.new("TextLabel") _label.Text=string.upper(_text) _label.Size=UDim2.new(1,0,1,0) _label.BackgroundTransparency=1 _label.TextSize=10 _label.Font=Enum.Font.GothamBold _label.TextXAlignment=Enum.TextXAlignment.Left _label.ZIndex=20 _label.TextColor3=Color3.new(1,1,1) _label.Parent=_frame
+local _lStroke=Instance.new("UIStroke") _lStroke.Thickness=1.2 _lStroke.Color=Color3.new(0,0,0) _lStroke.Transparency=0.15 _lStroke.Parent=_label
+local _lGrad=Instance.new("UIGradient") _lGrad.Color=_LayoutEngine.getSequence(os.clock()) _lGrad.Parent=_label
+local _underline=Instance.new("Frame") _underline.Size=UDim2.new(1,0,0,1) _underline.Position=UDim2.new(0,0,1,-1) _underline.BackgroundColor3=_ACCENT_COLOR _underline.BackgroundTransparency=0.55 _underline.BorderSizePixel=0 _underline.ZIndex=20 _underline.Parent=_frame
+local _ulGrad=Instance.new("UIGradient") _ulGrad.Color=_LayoutEngine.getSequence(os.clock()) _ulGrad.Parent=_underline
+end
+function _LayoutEngine.makeToggle(_pi,_text,_key,_cfg,_onChanged)
+local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,36) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.15 _row.BorderSizePixel=0 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.ClipsDescendants=true _row.Parent=_tabPages[_pi] Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8)
+local _rowGrad=Instance.new("UIGradient") _rowGrad.Color=_LayoutEngine.getSequence(os.clock()) _rowGrad.Rotation=20 _rowGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.65),NumberSequenceKeypoint.new(1,0.45)}) _rowGrad.Parent=_row
+local _rowLabel=Instance.new("TextLabel") _rowLabel.Text=_text _rowLabel.Size=UDim2.new(1,-56,1,0) _rowLabel.Position=UDim2.new(0,12,0,0) _rowLabel.BackgroundTransparency=1 _rowLabel.TextColor3=Color3.new(1,1,1) _rowLabel.TextSize=11 _rowLabel.Font=Enum.Font.GothamSemibold _rowLabel.TextXAlignment=Enum.TextXAlignment.Left _rowLabel.ZIndex=20 _rowLabel.Parent=_row
+local _rlStroke=Instance.new("UIStroke") _rlStroke.Thickness=1.2 _rlStroke.Color=Color3.new(0,0,0) _rlStroke.Transparency=0.15 _rlStroke.Parent=_rowLabel
+local _rlGrad=Instance.new("UIGradient") _rlGrad.Color=_LayoutEngine.getSequence(os.clock()) _rlGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.02),NumberSequenceKeypoint.new(1,0.15)}) _rlGrad.Parent=_rowLabel
+local _pill=Instance.new("Frame") _pill.Size=UDim2.new(0,40,0,20) _pill.Position=UDim2.new(1,-48,0.5,-10) _pill.BackgroundColor3=_cfg[_key] and _ACCENT_COLOR or Color3.fromRGB(50,50,50) _pill.BackgroundTransparency=0.05 _pill.BorderSizePixel=0 _pill.ZIndex=20 _pill.Parent=_row Instance.new("UICorner",_pill).CornerRadius=UDim.new(1,0)
+local _pillGrad=Instance.new("UIGradient") _pillGrad.Color=_LayoutEngine.getSequence(os.clock()) _pillGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,_cfg[_key] and 0.15 or 0.55),NumberSequenceKeypoint.new(1,_cfg[_key] and 0.02 or 0.35)}) _pillGrad.Parent=_pill
+local _knob=Instance.new("Frame") _knob.Size=UDim2.new(0,14,0,14) _knob.Position=_cfg[_key] and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7) _knob.BackgroundColor3=Color3.fromRGB(220,220,220) _knob.BorderSizePixel=0 _knob.ZIndex=21 _knob.Parent=_pill Instance.new("UICorner",_knob).CornerRadius=UDim.new(1,0)
+local _glow=Instance.new("Frame") _glow.Size=UDim2.new(1,6,1,6) _glow.Position=UDim2.new(0,-3,0,-3) _glow.BackgroundColor3=_ACCENT_COLOR _glow.BackgroundTransparency=_cfg[_key] and 0.85 or 1 _glow.BorderSizePixel=0 _glow.ZIndex=19 _glow.Parent=_pill Instance.new("UICorner",_glow).CornerRadius=UDim.new(1,0) _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.3}):Play()
+end
+) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play()
+end
+)
+local _clickRegion=Instance.new("TextButton") _clickRegion.Size=UDim2.new(1,0,1,0) _clickRegion.BackgroundTransparency=1 _clickRegion.Text="" _clickRegion.ZIndex=22 _clickRegion.AutoButtonColor=false _clickRegion.Parent=_row _clickRegion.MouseButton1Click:Connect(function() _cfg[_key]=not _cfg[_key]
+local _on=_cfg[_key] _LayoutEngine.PlaySound(_on and"ToggleOn" or"ToggleOff",0.25,_on and 1.1 or 0.9)
+local _mpos=_InputAdapter:GetMouseLocation() _LayoutEngine.Ripple(_row,_mpos.X-_row.AbsolutePosition.X,_mpos.Y-_row.AbsolutePosition.Y) _AnimationService:Create(_pill,TweenInfo.new(0.3,Enum.EasingStyle.Quint),{BackgroundColor3=_on and _ACCENT_COLOR or Color3.fromRGB(50,50,50),BackgroundTransparency=0.05}):Play() _AnimationService:Create(_knob,TweenInfo.new(0.3,Enum.EasingStyle.Quint),{Position=_on and UDim2.new(1,-17,0.5,-7) or UDim2.new(0,3,0.5,-7)}):Play() _AnimationService:Create(_glow,TweenInfo.new(0.3,Enum.EasingStyle.Quint),{BackgroundTransparency=_on and 0.85 or 1}):Play()
+if _onChanged then
+_onChanged(_on)
+end
+end
+)
+end
+function _LayoutEngine.makeSlider(_pi,_text,_key,_mn,_mx,_step,_cfg,_connections) _connections=_connections or {}
+local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,42) _row.BackgroundTransparency=0.85 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.Parent=_tabPages[_pi] Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8) _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.3}):Play()
+end
+) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play()
+end
+)
+local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(0.55,0,0,14) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=10 _lbl.Font=Enum.Font.Gotham _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.Parent=_row
+local _lStroke=Instance.new("UIStroke") _lStroke.Thickness=1.2 _lStroke.Color=Color3.new(0,0,0) _lStroke.Transparency=0.15 _lStroke.Parent=_lbl
+local _lGrad=Instance.new("UIGradient") _lGrad.Color=_LayoutEngine.getSequence(os.clock()) _lGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.1),NumberSequenceKeypoint.new(1,0.35)}) _lGrad.Parent=_lbl
+local _valLabel=Instance.new("TextLabel") _valLabel.Text=_step<1 and string.format("%.2f",_cfg[_key]) or tostring(math.floor(_cfg[_key])) _valLabel.Size=UDim2.new(0.43,0,0,14) _valLabel.Position=UDim2.new(0.55,0,0,0) _valLabel.BackgroundTransparency=1 _valLabel.TextColor3=Color3.new(1,1,1) _valLabel.TextSize=11 _valLabel.Font=Enum.Font.GothamBold _valLabel.TextXAlignment=Enum.TextXAlignment.Right _valLabel.ZIndex=20 _valLabel.Parent=_row
+local _vStroke=Instance.new("UIStroke") _vStroke.Thickness=1.2 _vStroke.Color=Color3.new(0,0,0) _vStroke.Transparency=0.15 _vStroke.Parent=_valLabel
+local _vGrad=Instance.new("UIGradient") _vGrad.Color=_LayoutEngine.getSequence(os.clock()) _vGrad.Parent=_valLabel
+local _track=Instance.new("Frame") _track.Size=UDim2.new(1,0,0,6) _track.Position=UDim2.new(0,0,0,24) _track.BackgroundColor3=Color3.fromRGB(40,40,40) _track.BackgroundTransparency=0.2 _track.BorderSizePixel=0 _track.ZIndex=20 _track.Parent=_row Instance.new("UICorner",_track).CornerRadius=UDim.new(0,3)
+local _trGrad=Instance.new("UIGradient") _trGrad.Color=_LayoutEngine.getSequence(os.clock()) _trGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.5),NumberSequenceKeypoint.new(1,0.3)}) _trGrad.Parent=_track
+local _pct=math.clamp((_cfg[_key]-_mn)/(_mx-_mn),0,1)
+local _fill=Instance.new("Frame") _fill.Size=UDim2.new(_pct,0,1,0) _fill.BackgroundColor3=_ACCENT_COLOR _fill.BorderSizePixel=0 _fill.ZIndex=21 _fill.Parent=_track Instance.new("UICorner",_fill).CornerRadius=UDim.new(0,3)
+local _knob=Instance.new("TextButton") _knob.Size=UDim2.new(0,16,0,16) _knob.AnchorPoint=Vector2.new(0.5,0.5) _knob.Position=UDim2.new(_pct,0,0.5,0) _knob.BackgroundColor3=Color3.fromRGB(220,220,220) _knob.Text="" _knob.AutoButtonColor=false _knob.BorderSizePixel=0 _knob.ZIndex=23 _knob.Parent=_track Instance.new("UICorner",_knob).CornerRadius=UDim.new(1,0)
+local _kGrad=Instance.new("UIGradient") _kGrad.Color=_LayoutEngine.getSequence(os.clock()) _kGrad.Parent=_knob
+local _kStroke=Instance.new("UIStroke") _kStroke.Thickness=1.5 _kStroke.Color=Color3.fromRGB(6,3,12) _kStroke.Transparency=0.3 _kStroke.Parent=_knob
+local _dragging=false
+local function _setValue(_val)
+if _step>0 then
+_val=math.floor(_val/_step+0.5)*_step
+end
+_val=math.clamp(_val,_mn,_mx) _cfg[_key]=_val
+local _p=math.clamp((_val-_mn)/(_mx-_mn),0,1) _fill.Size=UDim2.new(_p,0,1,0) _knob.Position=UDim2.new(_p,0,0.5,0) _valLabel.Text=_step<1 and string.format("%.2f",_val) or tostring(math.floor(_val))
+end
+_knob.InputBegan:Connect(function(_inp)
+if _inp.UserInputType==Enum.UserInputType.MouseButton1 then
+_dragging=true
+end
+end
+) table.insert(_connections,_InputAdapter.InputEnded:Connect(function(_inp)
+if _inp.UserInputType==Enum.UserInputType.MouseButton1 and _dragging then
+_dragging=false
+end
+end
+)) table.insert(_connections,_InputAdapter.InputChanged:Connect(function(_inp)
+if _dragging and _inp.UserInputType==Enum.UserInputType.MouseMovement then
+local _w=_track.AbsoluteSize.X
+if _w>0 then
+_setValue(_mn+math.clamp((_inp.Position.X-_track.AbsolutePosition.X)/_w,0,1)*(_mx-_mn))
+end
+end
+end
+)) _track.InputBegan:Connect(function(_inp)
+if _inp.UserInputType==Enum.UserInputType.MouseButton1 then
+local _w=_track.AbsoluteSize.X
+if _w>0 then
+_setValue(_mn+math.clamp((_inp.Position.X-_track.AbsolutePosition.X)/_w,0,1)*(_mx-_mn))
+end
+end
+end
+)
+end
+function _LayoutEngine.makeCycle(_pi,_text,_opts,_key,_cfg,_onChanged)
+local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,36) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.15 _row.BorderSizePixel=0 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.ClipsDescendants=true _row.Parent=_tabPages[_pi] Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8)
+local _rowGrad=Instance.new("UIGradient") _rowGrad.Color=_LayoutEngine.getSequence(os.clock()) _rowGrad.Rotation=20 _rowGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.65),NumberSequenceKeypoint.new(1,0.45)}) _rowGrad.Parent=_row
+local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(0.5,0,1,0) _lbl.Position=UDim2.new(0,12,0,0) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=11 _lbl.Font=Enum.Font.GothamSemibold _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.Parent=_row
+local _cStroke=Instance.new("UIStroke") _cStroke.Thickness=1.2 _cStroke.Color=Color3.new(0,0,0) _cStroke.Transparency=0.15 _cStroke.Parent=_lbl
+local _cGrad=Instance.new("UIGradient") _cGrad.Color=_LayoutEngine.getSequence(os.clock()) _cGrad.Parent=_lbl
+local _idx=_cfg[_key] or 1
+local _valLabel=Instance.new("TextLabel") _valLabel.Text=tostring(_opts[_idx]) _valLabel.Size=UDim2.new(0.42,0,1,0) _valLabel.Position=UDim2.new(0.5,0,0,0) _valLabel.BackgroundTransparency=1 _valLabel.TextColor3=Color3.new(1,1,1) _valLabel.TextSize=11 _valLabel.Font=Enum.Font.GothamBold _valLabel.TextXAlignment=Enum.TextXAlignment.Right _valLabel.ZIndex=20 _valLabel.Parent=_row
+local _cvStroke=Instance.new("UIStroke") _cvStroke.Thickness=1.2 _cvStroke.Color=Color3.new(0,0,0) _cvStroke.Transparency=0.15 _cvStroke.Parent=_valLabel
+local _cvGrad=Instance.new("UIGradient") _cvGrad.Color=_LayoutEngine.getSequence(os.clock()) _cvGrad.Parent=_valLabel _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.3}):Play()
+end
+) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play()
+end
+)
+local _clickRegion=Instance.new("TextButton") _clickRegion.Size=UDim2.new(1,0,1,0) _clickRegion.BackgroundTransparency=1 _clickRegion.Text="" _clickRegion.ZIndex=22 _clickRegion.AutoButtonColor=false _clickRegion.Parent=_row _clickRegion.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Click",0.2,1.0)
+local _mpos=_InputAdapter:GetMouseLocation() _LayoutEngine.Ripple(_row,_mpos.X-_row.AbsolutePosition.X,_mpos.Y-_row.AbsolutePosition.Y) _idx=_idx%#_opts+1 _cfg[_key]=_idx _valLabel.Text=tostring(_opts[_idx])
+if _onChanged then
+_onChanged(_idx)
+end
+end
+)
+end
+function _LayoutEngine.makeRebind(_pi,_text,_cfgKey,_cfg,_connections) _connections=_connections or {}
+local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,36) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.15 _row.BorderSizePixel=0 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.ClipsDescendants=true _row.Parent=_tabPages[_pi] Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8)
+local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(0.5,0,1,0) _lbl.Position=UDim2.new(0,12,0,0) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=11 _lbl.Font=Enum.Font.GothamSemibold _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.Parent=_row
+local _rStroke=Instance.new("UIStroke") _rStroke.Thickness=1.2 _rStroke.Color=Color3.new(0,0,0) _rStroke.Transparency=0.15 _rStroke.Parent=_lbl
+local _rGrad=Instance.new("UIGradient") _rGrad.Color=_LayoutEngine.getSequence(os.clock()) _rGrad.Parent=_lbl
+local _valLabel=Instance.new("TextLabel") _valLabel.Text="[ ".._cfg[_cfgKey].." ]" _valLabel.Size=UDim2.new(0.44,0,1,0) _valLabel.Position=UDim2.new(0.5,0,0,0) _valLabel.BackgroundTransparency=1 _valLabel.TextColor3=Color3.new(1,1,1) _valLabel.TextSize=12 _valLabel.Font=Enum.Font.GothamBold _valLabel.TextXAlignment=Enum.TextXAlignment.Right _valLabel.ZIndex=20 _valLabel.Parent=_row
+local _rvStroke=Instance.new("UIStroke") _rvStroke.Thickness=1.2 _rvStroke.Color=Color3.new(0,0,0) _rvStroke.Transparency=0.15 _rvStroke.Parent=_valLabel
+local _rvGrad=Instance.new("UIGradient") _rvGrad.Color=_LayoutEngine.getSequence(os.clock()) _rvGrad.Parent=_valLabel _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.3}):Play()
+end
+) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play()
+end
+)
+local _isRebinding=false
+local _clickRegion=Instance.new("TextButton") _clickRegion.Size=UDim2.new(1,0,1,0) _clickRegion.BackgroundTransparency=1 _clickRegion.Text="" _clickRegion.ZIndex=22 _clickRegion.AutoButtonColor=false _clickRegion.Parent=_row _clickRegion.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Click",0.2,1.0) _LayoutEngine.Ripple(_row,_row.AbsoluteSize.X/2,_row.AbsoluteSize.Y/2) _valLabel.Text="..." _isRebinding=true
+local _conn _conn=_InputAdapter.InputBegan:Connect(function(_inp)
+if _inp.UserInputType==Enum.UserInputType.Keyboard then
+local _keyName=_inp.KeyCode.Name
+if _keyName~="Unknown" then
+_cfg[_cfgKey]=_keyName _valLabel.Text="[ ".._keyName.." ]" _isRebinding=false pcall(function() _conn:Disconnect()
+end
+) _LayoutEngine.PlaySound("ToggleOn",0.2,1.3)
+end
+end
+end
+) task.delay(5,function()
+if _isRebinding then
+_isRebinding=false _valLabel.Text="[ ".._cfg[_cfgKey].." ]" pcall(function() _conn:Disconnect()
+end
+)
+end
+end
+)
+end
+)
+end
+function _LayoutEngine.makeInfo(_pi,_text)
+local _lbl=Instance.new("TextLabel") _lbl.Size=UDim2.new(1,-4,0,14) _lbl.BackgroundTransparency=1 _lbl.Text=_text _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=9 _lbl.Font=Enum.Font.Code _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.LayoutOrder=_nextOrder(_pi) _lbl.Parent=_tabPages[_pi]
+local _iStroke=Instance.new("UIStroke") _iStroke.Thickness=1.2 _iStroke.Color=Color3.new(0,0,0) _iStroke.Transparency=0.15 _iStroke.Parent=_lbl
+local _iGrad=Instance.new("UIGradient") _iGrad.Color=_LayoutEngine.getSequence(os.clock()) _iGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.15),NumberSequenceKeypoint.new(1,0.45)}) _iGrad.Parent=_lbl
+end
+function _LayoutEngine.makeLabel(_pi)
+local _lbl=Instance.new("TextLabel") _lbl.Text="" _lbl.Size=UDim2.new(1,-8,0,16) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=12 _lbl.Font=Enum.Font.GothamBold _lbl.TextXAlignment=Enum.TextXAlignment.Left _lbl.ZIndex=20 _lbl.LayoutOrder=_nextOrder(_pi) _lbl.Parent=_tabPages[_pi]
+local _lStroke=Instance.new("UIStroke") _lStroke.Thickness=1.2 _lStroke.Color=Color3.new(0,0,0) _lStroke.Transparency=0.15 _lStroke.Parent=_lbl
+local _lGrad=Instance.new("UIGradient") _lGrad.Color=_LayoutEngine.getSequence(os.clock()) _lGrad.Parent=_lbl
+return _lbl
+end
+function _LayoutEngine.makeButton(_pi,_text,_handler)
+local _row=Instance.new("Frame") _row.Size=UDim2.new(1,-4,0,36) _row.BackgroundColor3=Color3.fromRGB(25,25,25) _row.BackgroundTransparency=0.15 _row.BorderSizePixel=0 _row.ZIndex=18 _row.LayoutOrder=_nextOrder(_pi) _row.ClipsDescendants=true _row.Parent=_tabPages[_pi] Instance.new("UICorner",_row).CornerRadius=UDim.new(0,8)
+local _rowGrad=Instance.new("UIGradient") _rowGrad.Color=_LayoutEngine.getSequence(os.clock()) _rowGrad.Rotation=20 _rowGrad.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,0.6),NumberSequenceKeypoint.new(1,0.35)}) _rowGrad.Parent=_row
+local _lbl=Instance.new("TextLabel") _lbl.Text=_text _lbl.Size=UDim2.new(1,0,1,0) _lbl.BackgroundTransparency=1 _lbl.TextColor3=Color3.new(1,1,1) _lbl.TextSize=11 _lbl.Font=Enum.Font.GothamBold _lbl.TextXAlignment=Enum.TextXAlignment.Center _lbl.ZIndex=20 _lbl.Parent=_row
+local _bStroke=Instance.new("UIStroke") _bStroke.Thickness=1.2 _bStroke.Color=Color3.new(0,0,0) _bStroke.Transparency=0.15 _bStroke.Parent=_lbl
+local _bGrad2=Instance.new("UIGradient") _bGrad2.Color=_LayoutEngine.getSequence(os.clock()) _bGrad2.Parent=_lbl _row.MouseEnter:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.25}):Play()
+end
+) _row.MouseLeave:Connect(function() _AnimationService:Create(_row,TweenInfo.new(0.15),{BackgroundTransparency=0.85}):Play()
+end
+)
+local _clickRegion=Instance.new("TextButton") _clickRegion.Size=UDim2.new(1,0,1,0) _clickRegion.BackgroundTransparency=1 _clickRegion.Text="" _clickRegion.ZIndex=22 _clickRegion.AutoButtonColor=false _clickRegion.Parent=_row _clickRegion.MouseButton1Click:Connect(function() _LayoutEngine.PlaySound("Click",0.25,1.0)
+local _mpos=_InputAdapter:GetMouseLocation() _LayoutEngine.Ripple(_row,_mpos.X-_row.AbsolutePosition.X,_mpos.Y-_row.AbsolutePosition.Y)
+if _handler then
+_handler()
+end
+end
+)
+end
+local _menuOpen=false _LayoutEngine.isOpen=false
+local _savedMouseBehavior,_savedMouseIconEnabled
+function _LayoutEngine.openMenu(_cfg) _menuOpen=true _LayoutEngine.isOpen=true _mainWindow.Visible=true _focusDim.Visible=true _bgOverlay.Visible=true _crescentCanvas.Visible=true _enhanceBtn.Visible=true _winW,_winH=_LayoutEngine.getWS(_cfg) _focusDim.BackgroundTransparency=1 _bgOverlay.BackgroundTransparency=1 _AnimationService:Create(_focusDim,TweenInfo.new(0.3),{BackgroundTransparency=0.75}):Play() _AnimationService:Create(_bgOverlay,TweenInfo.new(0.35),{BackgroundTransparency=0.32}):Play() _mainWindow.Size=UDim2.new(0,_winW*0.88,0,_winH*0.88) _mainWindow.Position=UDim2.new(0.5,-_winW*0.44,0.5,-_winH*0.44) _mainWindow.BackgroundTransparency=0.5 _AnimationService:Create(_mainWindow,TweenInfo.new(0.35,Enum.EasingStyle.Back,Enum.EasingDirection.Out),{Size=UDim2.new(0,_winW,0,_winH),Position=UDim2.new(0.5,-_winW/2,0.5,-_winH/2),BackgroundTransparency=0.08}):Play() _LayoutEngine.PlaySound("Open",0.28,1) pcall(function() _savedMouseBehavior=_InputAdapter.MouseBehavior _savedMouseIconEnabled=_InputAdapter.MouseIconEnabled _InputAdapter.MouseBehavior=Enum.MouseBehavior.Default _InputAdapter.MouseIconEnabled=true
+end
+)
+end
+function _LayoutEngine.closeMenu(_cfg) _menuOpen=false _LayoutEngine.isOpen=false _AnimationService:Create(_focusDim,TweenInfo.new(0.2),{BackgroundTransparency=1}):Play() _AnimationService:Create(_bgOverlay,TweenInfo.new(0.25),{BackgroundTransparency=1}):Play() _AnimationService:Create(_mainWindow,TweenInfo.new(0.25,Enum.EasingStyle.Quint,Enum.EasingDirection.In),{Size=UDim2.new(0,_winW*0.88,0,_winH*0.88),BackgroundTransparency=1}):Play() _LayoutEngine.PlaySound("Close",0.22,1)
+if _LayoutEngine._onMenuClose then
+_LayoutEngine._onMenuClose()
+end
+_enhanceBtn.Visible=false task.delay(0.3,function()
+if not _menuOpen then
+_mainWindow.Visible=false _focusDim.Visible=false _bgOverlay.Visible=false _crescentCanvas.Visible=false
+end
+end
+) pcall(function()
+if _savedMouseBehavior then
+_InputAdapter.MouseBehavior=_savedMouseBehavior
+end
+if _savedMouseIconEnabled~=nil then
+_InputAdapter.MouseIconEnabled=_savedMouseIconEnabled
+end
+end
+)
+end
+function _LayoutEngine.handleDrag(_inputPos)
+if _LayoutEngine._dragState.drag and _LayoutEngine._dragState.start and _LayoutEngine._dragState.pos then
+local _delta=_inputPos-_LayoutEngine._dragState.start _mainWindow.Position=UDim2.new(_LayoutEngine._dragState.pos.X.Scale,_LayoutEngine._dragState.pos.X.Offset+_delta.X,_LayoutEngine._dragState.pos.Y.Scale,_LayoutEngine._dragState.pos.Y.Offset+_delta.Y)
+end
+if _LayoutEngine._bfDrag.drag and _LayoutEngine._bfDrag.start and _LayoutEngine._bfDrag.pos then
+local _delta=_inputPos-_LayoutEngine._bfDrag.start _keybindPanel.Position=UDim2.new(_LayoutEngine._bfDrag.pos.X.Scale,_LayoutEngine._bfDrag.pos.X.Offset+_delta.X,_LayoutEngine._bfDrag.pos.Y.Scale,_LayoutEngine._bfDrag.pos.Y.Offset+_delta.Y)
+end
+end
+local _Renderer=_LayoutEngine do
+local _PlayerService=game:GetService("Players")
+local _InputAdapter=game:GetService("UserInputService")
+local _FrameService=game:GetService("RunService")
+local _RenderEnv=game:GetService("Lighting")
+local _DataSerializer=game:GetService("HttpService")
+local _ActiveUser=_PlayerService.LocalPlayer _InputAdapter.InputChanged:Connect(function(_input)
+if _input.UserInputType==Enum.UserInputType.MouseMovement then
+_Renderer.handleDrag(_input.Position)
+end
+end
+) _Renderer._fovCircle=nil _Renderer._fovVisible=false
+function _Renderer.createFOVCircle()
+if _Renderer._fovCircle then
+return _Renderer._fovCircle
+end
+local _ok,_circle=pcall(function()
+local _c=Drawing.new("Circle") _c.Thickness=1.5 _c.NumSides=360 _c.Radius=100 _c.Filled=false _c.Visible=false _c.Transparency=0.8 _c.Color=Color3.fromRGB(200,200,255)
+return _c
+end
+)
+if _ok and _circle then
+_Renderer._fovCircle=_circle
+return _circle
+end
+return nil
+end
+function _Renderer.updateFOVCircle(_prefs,_forceHide)
+local _circle=_Renderer._fovCircle or _Renderer.createFOVCircle()
+if not _circle then
+return
+end
+if _forceHide or _Renderer.isOpen or not _prefs.ShowFOV then
+_circle.Visible=false _Renderer._fovVisible=false
+return
+end
+local _cam=workspace.CurrentCamera
+if not _cam then
+_circle.Visible=false
+return
+end
+local _vp=_cam.ViewportSize
+local _centerX=_vp.X*0.5
+local _centerY=_vp.Y*0.5
+local _scale=math.min(_vp.X,_vp.Y)/1080
+local _radius=(_prefs.FOVRadius or 100)*_scale _circle.Position=Vector2.new(_centerX,_centerY) _circle.Radius=_radius _circle.NumSides=360 _circle.Thickness=_prefs.FOVThickness or 1.5 _circle.Transparency=_prefs.FOVTransparency or 0.8
+if _prefs.FOVMatchGUI then
+_circle.Color=_Renderer.getColor(os.clock(),0.5)
+else
+_circle.Color=_prefs.FOVColor or Color3.fromRGB(200,200,255)
+end
+_circle.Visible=true _Renderer._fovVisible=true
+end
+function _Renderer.hideFOVCircle()
+if _Renderer._fovCircle then
+_Renderer._fovCircle.Visible=false _Renderer._fovVisible=false
+end
+end
+return _LayoutEngine
