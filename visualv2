@@ -2566,6 +2566,7 @@ function _LayoutEngine.makeInfo(_pi, _text)
 end
 
 -- Dynamic label (returns reference for external text updates)
+function _LayoutEngine.makeLabel(_pi)
     local _lbl = Instance.new("TextLabel")
     _lbl.Text                  = ""
     _lbl.Size                  = UDim2.new(1, -8, 0, 16)
