@@ -1,5 +1,5 @@
 --[[
-    ✦ GameUI Toolkit v4.0 — Interface Rendering Module
+    ✦ GameUI Toolkit v4.1 — Interface Rendering Module
     
     This module provides adaptive UI rendering for supported
     Roblox experiences. It handles theme management, layout
@@ -527,7 +527,7 @@ local _verLabel = Instance.new("TextLabel")
 _verLabel.Size                  = UDim2.new(0, 100, 1, 0)
 _verLabel.Position              = UDim2.new(0, 10, 0, 0)
 _verLabel.BackgroundTransparency = 1
-_verLabel.Text                  = "MOON v4.0"
+_verLabel.Text                  = "MOON v4.1"
 _verLabel.TextColor3            = _BRAND_COLOR
 _verLabel.TextSize              = 11
 _verLabel.Font                  = Enum.Font.GothamBold
@@ -3414,15 +3414,28 @@ _Renderer.ConfigSystem = {}
 
 -- Whitelisted preference keys for serialization
 local _PREF_KEYS = {
-    "Enabled", "FOVRadius", "Smoothness", "AimPart", "AimKey",
-    "Triggerbot", "TriggerDelay", "ShowFOV", "ShowESP", "ShowChams",
-    "FOVMatchGUI", "ESPMatchGUI", "DashEnabled", "DashKey",
-    "DashForce", "DashCooldown", "SpinSpeed", "SpinThirdPerson",
-    "SpinCameraOffset", "RageDash", "RageTarget", "RageSpin",
-    "WindowMode", "ESPBox", "ESPName", "ESPDistance", "ESPHealth",
-    "ESPHealthBar", "ESPTracer", "FOVThickness", "FOVTransparency",
+    "Enabled", "AimMode", "AimKey", "FOV", "AimSpeed", "AimPart",
+    "SmoothFactor", "AimRange", "AimVisCheck", "FirstPersonOnly",
+    "StickTarget", "AimPrediction", "PredictionStrength",
+    "Triggerbot", "TrigBotRadius", "TrigBotDelay", "TrigBotVisOnly",
+    "ShowFOV", "ShowESP", "ShowChams",
     "ChamsFillTransparency", "ChamsOutlineTransparency",
-    "TargetKey"
+    "ShowSkeleton", "ShowHeadDot", "ShowTracers", "ShowSnapLine",
+    "ShowName", "ShowHP", "ShowDist", "ShowHitmarker",
+    "ShowTargetCircle", "ShowHUD", "ShowOffscreen",
+    "ESPRange", "ESPColorMode", "ESPLineSmooth",
+    "DashEnabled", "DashKey", "DashDuration", "DashBehindDist",
+    "DashTurnCam", "DashCooldown", "DashAirCheck", "TeamCheck",
+    "WindowMode", "RageMode",
+    "RageSpin", "RageSpinMode", "RageSpinSpeed", "RageSpinShootDelay",
+    "RageSpinLookDown", "RageSpinLookDownAngle", "RageSpinAutoShoot",
+    "RageSpinAimRadius", "RageSpinForceThirdPerson",
+    "RageDash", "RageTarget",
+    "BhopEnabled", "BhopJumpDelay",
+    "ForceThirdPerson", "ForceThirdPersonDist",
+    "TargetEnabled", "TargetKey", "TargetRadius", "TargetSpeed",
+    "TargetChaseSpeed", "TargetMaxRange", "TargetDirection",
+    "TargetAutoSwitch", "TargetSwitchTime"
 }
 
 -- Theme/appearance preference keys
@@ -3809,7 +3822,7 @@ function _Renderer.buildUITab(_prefs, _connections)
     end)
 
     _Renderer.makeSection(_pageIdx, "INFO")
-    _Renderer.makeInfo(_pageIdx, "MOON v4.0 — Classic clean UI")
+    _Renderer.makeInfo(_pageIdx, "MOON v4.1 — Rage Spin + Bhop update")
     _Renderer.makeInfo(_pageIdx, "Black background, Red accents, Yellow branding")
     _Renderer.makeInfo(_pageIdx, "No gradients, no blur, no effects")
 end
@@ -3822,7 +3835,11 @@ end
 function _Renderer.buildPatchTab()
     local _pageIdx = 7
 
-    _Renderer.makeSection(_pageIdx, "PATCH NOTES v4.0")
+    _Renderer.makeSection(_pageIdx, "PATCH NOTES v4.1")
+    _Renderer.makeInfo(_pageIdx, "• v4.1 — Rage spin full rewrite + auto-aim + auto-shoot")
+    _Renderer.makeInfo(_pageIdx, "• v4.1 — Bunny hop system added")
+    _Renderer.makeInfo(_pageIdx, "• v4.1 — Force 3rd person camera override")
+    _Renderer.makeInfo(_pageIdx, "• v4.1 — Triggerbot v2 multi-part scan")
     _Renderer.makeInfo(_pageIdx, "• v4.0 — Clean release build")
     _Renderer.makeInfo(_pageIdx, "• Fixed colors: black bg, red accents, yellow brand")
     _Renderer.makeInfo(_pageIdx, "• No gradients, no blur, no effects")
@@ -3837,7 +3854,7 @@ function _Renderer.buildPatchTab()
     _Renderer.makeInfo(_pageIdx, "• X button fully destroys GUI")
 
     _Renderer.makeSection(_pageIdx, "CREDITS")
-    _Renderer.makeInfo(_pageIdx, "MOON v4.0 by dev team")
+    _Renderer.makeInfo(_pageIdx, "MOON v4.1 by dev team")
 end
 
 -- ═══════════════════════════════════════════════════════
@@ -4004,7 +4021,7 @@ function _Renderer.init(_prefs, _connections)
 
     -- Welcome notification (delayed to appear after splash)
     task.delay(2.5, function()
-        _Renderer.Notify("MOON", "v4.0 loaded successfully", 4)
+        _Renderer.Notify("MOON", "v4.1 loaded successfully", 4)
     end)
 end
 
