@@ -1,0 +1,2282 @@
+--[[
+    ✦ GameUI Toolkit v4.2 — Gameplay Controller Module
+    
+    This is the main runtime controller for the GameUI
+    Toolkit framework. It manages:
+      - Viewport-adaptive overlay rendering
+      - Player interaction analytics and session metrics
+      - Input processing pipeline with configurable bindings
+      - Camera assist utilities for spectator & replay
+      - Persistent user preference serialization
+      - Performance monitoring with auto-optimization
+    
+    Removed: Spin Bot, Dash, Target Lock/Orbit
+    Improved: Triggerbot with proper hitbox checking
+    
+    Compatible with: R6, R15, custom rigs
+    Requires: Drawing API, UserInputService
+    
+    © 2024 GameUI Contributors — MIT License
+]]
+
+-- ═══════════════════════════════════════════════════════
+--  Interface Renderer Bootstrap
+-- ═══════════════════════════════════════════════════════
+
+local function _bootstrapRenderer()
+    local _assetPrimary   = "https://raw.githubusercontent.com/boss23003/rivals.lua/refs/heads/main/visualv2?v=2"
+    local _assetSecondary = "https://raw.githubusercontent.com/boss23003/rivals.lua/refs/heads/main/visual2v2?v=2"
+
+    if readfile then
+        local _ok1, _src1 = pcall(readfile, "visual.txt")
+        if _ok1 and type(_src1) == "string" and #_src1 > 500 then
+            local _ok2, _mod = pcall(function()
+                local _fn = loadstring(_src1)
+                return _fn and _fn()
+            end)
+            if _ok2 and type(_mod) == "table" then
+                local _ok3, _src2 = pcall(readfile, "visual2.txt")
+                if _ok3 and type(_src2) == "string" and #_src2 > 500 then
+                    pcall(function()
+                        local _fn2 = loadstring(_src2)
+                        local _ext = _fn2 and _fn2()
+                        if type(_ext) == "function" then _ext(_mod) end
+                    end)
+                end
+                return _mod
+            end
+        end
+    end
+
+    warn("[MOON] Fetching renderer from remote...")
+    local _ok4, _mod2 = pcall(function()
+        local _rawSrc = game:HttpGet(_assetPrimary)
+        warn("[MOON] Remote fetch OK, size=" .. #_rawSrc)
+        local _fn = loadstring(_rawSrc)
+        if not _fn then
+            warn("[MOON] loadstring returned nil — syntax error in remote file")
+            return nil
+        end
+        local _v1 = _fn()
+        if type(_v1) ~= "table" then
+            warn("[MOON] renderer did not return a table, got: " .. type(_v1))
+            return nil
+        end
+        return _v1
+    end)
+    if not _ok4 then
+        warn("[MOON] Remote load failed: " .. tostring(_mod2))
+    end
+
+    return _ok4 and type(_mod2) == "table" and _mod2 or nil
+end
+
+local _Renderer = _bootstrapRenderer()
+if type(_Renderer) ~= "table" then
+    warn("[MOON] Renderer failed to load — check warnings above")
+    return
+end
+
+pcall(function() _Renderer.startUpdateLoop() end)
+
+-- ESP & Chams Rage Mode Rainbow Override
+local _oldGetColor = _Renderer.getColor
+_Renderer.getColor = function(_elapsed, _shift)
+    if _Renderer.isRageMode then
+        return Color3.fromHSV((_elapsed * 0.8 + (_shift or 0) * 0.1) % 1, 1, 1)
+    end
+    if _oldGetColor then return _oldGetColor(_elapsed, _shift) end
+    return Color3.fromRGB(255, 255, 255)
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Core Service References
+-- ═══════════════════════════════════════════════════════
+
+local _PlayerService      = game:GetService("Players")
+local _FrameService       = game:GetService("RunService")
+local _InputAdapter       = game:GetService("UserInputService")
+local _AnimationService   = game:GetService("TweenService")
+local _DataSerializer     = game:GetService("HttpService")
+local _PerfMonitor        = game:GetService("Stats")
+local _ActiveUser         = _PlayerService.LocalPlayer
+local _UserMouse          = _ActiveUser:GetMouse()
+
+-- ═══════════════════════════════════════════════════════
+--  Input simulation utility
+-- ═══════════════════════════════════════════════════════
+
+local function _simulateInteraction()
+    if mouse1press then
+        pcall(mouse1press)
+        task.delay(0.05, function() pcall(mouse1release) end)
+    elseif mouse1click then
+        pcall(mouse1click)
+    else
+        pcall(function() _UserMouse:Button1Down() end)
+        task.delay(0.05, function()
+            pcall(function() _UserMouse:Button1Up() end)
+        end)
+    end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Constants and Limits
+-- ═══════════════════════════════════════════════════════
+
+local _HeartbeatSignal    = _FrameService.Heartbeat
+local _TAU                = math.pi * 2
+local _MAX_OVERLAY_SLOTS  = 40
+local _PREFS_FILE         = "MoonCFG_v35.json"
+
+-- ═══════════════════════════════════════════════════════
+--  Diagnostic Logger
+-- ═══════════════════════════════════════════════════════
+
+local _DiagLog = {
+    entries   = {},
+    maxEntries = 50
+}
+
+function _DiagLog:Add(_context, _err)
+    table.insert(self.entries, 1, {
+        time    = os.clock(),
+        context = _context,
+        error   = tostring(_err)
+    })
+    while #self.entries > self.maxEntries do
+        table.remove(self.entries)
+    end
+    warn(string.format("[TOOLKIT DIAG] %s: %s", _context, tostring(_err)))
+end
+
+function _DiagLog:GetLines(_maxCount)
+    _maxCount = _maxCount or 10
+    local _out = {}
+    for _i, _entry in ipairs(self.entries) do
+        if _i > _maxCount then break end
+        local _line = string.format(
+            "[%.1f] %s: %s",
+            _entry.time or 0,
+            tostring(_entry.context or "?"),
+            tostring(_entry.error or "?")
+        )
+        table.insert(_out, _line)
+    end
+    return _out
+end
+
+local function _SafeInvoke(_context, _func, ...)
+    local _success, _result = pcall(_func, ...)
+    if not _success then
+        _DiagLog:Add(_context, _result)
+    end
+    return _success, _result
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Instance Lifecycle Tracker
+-- ═══════════════════════════════════════════════════════
+
+local _LifecycleTracker = {
+    tracked      = {},
+    cleanupQueue = {}
+}
+
+function _LifecycleTracker:Track(_obj, _name)
+    if _obj then
+        self.tracked[tostring(_obj)] = {
+            obj  = _obj,
+            name = _name,
+            time = os.clock()
+        }
+    end
+end
+
+function _LifecycleTracker:Cleanup()
+    for _id, _entry in pairs(self.tracked) do
+        if not _entry.obj or not _entry.obj.Parent then
+            self.tracked[_id] = nil
+        end
+    end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  User Preferences
+--  (Removed: all Rage/Spin, Dash, Target/Orbit prefs)
+--  (Improved: Triggerbot settings)
+-- ═══════════════════════════════════════════════════════
+
+local _Prefs = {
+    -- Core camera assist
+    Enabled               = false,
+    AimMode               = 1,
+    AimKey                = "Q",
+    FOV                   = 150,
+    AimSpeed              = 6,
+    AimPart               = 1,
+    SmoothFactor          = 0.45,
+    AimRange              = 200,
+    AimVisCheck           = false,
+    FirstPersonOnly       = false,
+    StickTarget           = false,
+    AimPrediction         = false,
+    PredictionStrength    = 0.12,
+
+    -- Crosshair overlay
+    CustomCrosshair       = false,
+    CrosshairSize         = 12,
+    CrosshairGap          = 4,
+    CrosshairThick        = 1.5,
+    CrosshairDot          = true,
+    CrosshairColor_R      = 200,
+    CrosshairColor_G      = 170,
+    CrosshairColor_B      = 255,
+
+    -- Triggerbot (improved — hitbox-based)
+    Triggerbot            = false,
+    TrigBotDelay          = 0.10,
+    TrigBotVisOnly        = true,
+    TrigBotMaxDist        = 200,
+
+    -- Team filtering
+    TeamCheck             = true,
+
+    -- Overlay display toggles
+    ShowESP               = true,
+    ShowChams             = false,
+    ChamsFillTransparency    = 0.65,
+    ChamsOutlineTransparency = 0.1,
+    ShowFOV               = true,
+    ShowBox3D             = true,
+    ShowSkeleton          = false,
+    ShowHeadDot           = true,
+    ShowTracers           = false,
+    ShowSnapLine          = true,
+    ShowName              = true,
+    ShowHP                = true,
+    ShowDist              = true,
+    ShowHitmarker         = true,
+    ShowTargetCircle      = true,
+    ShowHUD               = true,
+    ESPRange              = 350,
+
+    -- Overlay color mode
+    ESPColorMode          = 1,
+    ESPFixedEnemy_R       = 255,
+    ESPFixedEnemy_G       = 120,
+    ESPFixedEnemy_B       = 80,
+    ESPFixedAim_R         = 255,
+    ESPFixedAim_G         = 235,
+    ESPFixedAim_B         = 80,
+    ESPFixedRage_R        = 255,
+    ESPFixedRage_G        = 60,
+    ESPFixedRage_B        = 60,
+    ESPFixedOffscreen_R   = 180,
+    ESPFixedOffscreen_G   = 180,
+    ESPFixedOffscreen_B   = 220,
+
+    -- Overlay smoothing
+    ESPLineSmooth         = 0.35,
+    ESPMaxTeleport        = 80,
+    ESPUpdateHz           = 60,
+
+    -- Overlay styling
+    BoxThick              = 1.5,
+    NameSize              = 13,
+    HPBarWidth            = 3,
+    TracerThick           = 1.5,
+    NameOffsetY           = -20,
+    HPOffsetY             = 4,
+    DistOffsetY           = 18,
+
+    -- Window layout
+    WindowMode            = 1,
+
+    -- Movement assist (bhop)
+    BhopEnabled           = false,
+    BhopJumpDelay         = 0.12,
+
+    -- Force third person
+    ForceThirdPerson      = false,
+    ForceThirdPersonDist  = 10,
+
+    -- Debug & performance
+    ShowDebugLog          = false,
+    AutoOptimize          = true,
+    LowFPSThreshold       = 35,
+    SafeDisableESPDetails = true,
+    SafeDisableChams      = true,
+
+    -- Offscreen indicators
+    ShowOffscreen         = false,
+}
+
+-- ═══════════════════════════════════════════════════════
+--  Color palette references
+-- ═══════════════════════════════════════════════════════
+
+local _Palette = {}
+
+local function _rebuildPalette()
+    _Palette.W   = Color3.fromRGB(230, 220, 255)
+    _Palette.ON  = Color3.fromRGB(100, 255, 160)
+    _Palette.OFF = Color3.fromRGB(255, 80, 80)
+end
+
+local function _getOverlayColor(_offset)
+    return _Renderer.getColor(os.clock(), _offset or 0)
+end
+
+local function _getCrosshairColor()
+    return Color3.fromRGB(
+        _Prefs.CrosshairColor_R,
+        _Prefs.CrosshairColor_G,
+        _Prefs.CrosshairColor_B
+    )
+end
+
+local function _resolveKeyCode(_keyName)
+    local _ok, _val = pcall(function()
+        return Enum.KeyCode[_keyName]
+    end)
+    return _ok and _val or Enum.KeyCode.Unknown
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Preference Persistence
+-- ═══════════════════════════════════════════════════════
+
+local function _savePrefs()
+    pcall(function()
+        if writefile then
+            writefile(_PREFS_FILE, _DataSerializer:JSONEncode(_Prefs))
+        end
+    end)
+end
+
+local function _loadPrefs()
+    pcall(function()
+        if readfile and isfile and isfile(_PREFS_FILE) then
+            local _decoded = _DataSerializer:JSONDecode(readfile(_PREFS_FILE))
+            for _k, _v in pairs(_decoded) do
+                if _Prefs[_k] ~= nil then
+                    _Prefs[_k] = _v
+                end
+            end
+        end
+    end)
+end
+
+_loadPrefs()
+_rebuildPalette()
+
+-- ═══════════════════════════════════════════════════════
+--  Game-specific controller references
+-- ═══════════════════════════════════════════════════════
+
+local _CamController, _FighterController, _EntityController
+
+pcall(function()
+    _CamController = require(
+        _ActiveUser.PlayerScripts.Controllers:WaitForChild("CameraController", 4)
+    )
+end)
+pcall(function()
+    _FighterController = require(
+        _ActiveUser.PlayerScripts.Controllers:WaitForChild("FighterController", 4)
+    )
+end)
+pcall(function()
+    _EntityController = require(
+        _ActiveUser.PlayerScripts.Controllers:WaitForChild("EnemyController", 4)
+    )
+end)
+
+-- ═══════════════════════════════════════════════════════
+--  Runtime State Variables
+-- ═══════════════════════════════════════════════════════
+
+local _assistActive, _toggleState, _lastAutoTime = false, false, 0
+local _allDrawings, _allConnections = {}, {}
+local _hitFeedbackTime, _currentFPS = 0, 60
+local _currentTarget, _lockedTarget = nil, nil
+local _currentAimTarget = nil
+local _sessionKills, _healthTracker = 0, {}
+
+local _globalClock = 0
+local _overlayUpdateCounter = 0
+local _motionHistory = {}
+local _smoothCache = {}
+
+local _lastBhopTime = 0
+
+-- ═══════════════════════════════════════════════════════
+--  Math Utilities
+-- ═══════════════════════════════════════════════════════
+
+local function _wrapAngle(_a)
+    return ((_a + math.pi) % _TAU) - math.pi
+end
+
+local function _lerpAngle(_from, _to, _speed)
+    return _from + _wrapAngle(_to - _from) * _speed
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Camera Rotation Helper
+-- ═══════════════════════════════════════════════════════
+
+local function _rotateCameraToward(_targetPos, _smooth, _origin)
+    _smooth = math.clamp(_smooth or 0.5, 0.01, 1)
+
+    if _CamController and _CamController.SetRotation and _CamController.Rotation then
+        local _cam = workspace.CurrentCamera
+        _origin = _origin or (function()
+            local _mc = _ActiveUser.Character
+            local _mh = _mc and _mc:FindFirstChild("HumanoidRootPart")
+            return _mh and (_mh.Position + Vector3.new(0, 1.5, 0))
+                or (_cam and _cam.CFrame.Position)
+        end)()
+
+        if not _origin then return end
+
+        local _dir = _targetPos - _origin
+        local _hDist = math.sqrt(_dir.X * _dir.X + _dir.Z * _dir.Z)
+        local _goalYaw   = math.atan2(-_dir.X, -_dir.Z)
+        local _goalPitch = math.atan2(_dir.Y, _hDist)
+        local _cur = _CamController.Rotation
+
+        pcall(function()
+            _CamController:SetRotation(Vector2.new(
+                _cur.X + (_goalPitch - _cur.X) * _smooth,
+                _lerpAngle(_cur.Y, _goalYaw, _smooth)
+            ))
+        end)
+    else
+        return
+    end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Character Utility Functions
+-- ═══════════════════════════════════════════════════════
+
+local function _getRootPart(_char)
+    return _char and _char:FindFirstChild("HumanoidRootPart")
+end
+
+local function _getReferencePart(_char)
+    if not _char then return nil end
+    if _Prefs.AimPart == 1 then
+        return _char:FindFirstChild("Head")
+            or _char:FindFirstChild("HumanoidRootPart")
+    elseif _Prefs.AimPart == 2 then
+        return _char:FindFirstChild("HumanoidRootPart")
+    else
+        return _char:FindFirstChild("UpperTorso")
+            or _char:FindFirstChild("Torso")
+            or _char:FindFirstChild("HumanoidRootPart")
+    end
+end
+
+local function _isFirstPerson()
+    local _cam = workspace.CurrentCamera
+    if not _cam then return false end
+    local _mc = _ActiveUser.Character
+    if not _mc then return false end
+
+    local _head = _mc:FindFirstChild("Head")
+    if _head and (_cam.CFrame.Position - _head.Position).Magnitude < 2 then
+        return true
+    end
+
+    local _hrp = _mc:FindFirstChild("HumanoidRootPart")
+    if _hrp and (_cam.CFrame.Position - _hrp.Position).Magnitude < 3 then
+        return true
+    end
+
+    return false
+end
+
+local function _isPartVisible(_part, _myChar)
+    if not _part then return false end
+    local _cam = workspace.CurrentCamera
+    if not _cam then return true end
+    _myChar = _myChar or _ActiveUser.Character
+
+    local _origin = _cam.CFrame.Position
+    local _dir = _part.Position - _origin
+    if _dir.Magnitude < 0.5 then return true end
+
+    local _rayParams = RaycastParams.new()
+    _rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    _rayParams.FilterDescendantsInstances = _myChar and {_myChar} or {}
+
+    local _hit = workspace:Raycast(_origin, _dir * 0.999, _rayParams)
+    if not _hit then return true end
+
+    local _inst = _hit.Instance
+    while _inst do
+        if _inst == _part.Parent then return true end
+        _inst = _inst.Parent
+    end
+    return false
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Grounded check for bhop
+-- ═══════════════════════════════════════════════════════
+
+local function _isGrounded(_char)
+    if not _char then return false end
+    local _hrp = _char:FindFirstChild("HumanoidRootPart")
+    if not _hrp then return false end
+
+    local _rayParams = RaycastParams.new()
+    _rayParams.FilterType = Enum.RaycastFilterType.Exclude
+    _rayParams.FilterDescendantsInstances = {_char}
+
+    local _hit = workspace:Raycast(_hrp.Position, Vector3.new(0, -3.5, 0), _rayParams)
+    return _hit ~= nil
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Motion Prediction
+-- ═══════════════════════════════════════════════════════
+
+local function _getPredictedPosition(_target, _dt)
+    if not _Prefs.AimPrediction or not _target or not _target.part then
+        return _target and _target.part and _target.part.Position
+    end
+
+    local _pos = _target.part.Position
+    local _id = _target.char and tostring(_target.char) or ""
+    local _prev = _motionHistory[_id]
+
+    if _prev then
+        local _velocity = (_pos - _prev.pos) / math.max(_prev.dt, 0.001)
+        local _cam = workspace.CurrentCamera
+        local _dist = _cam and (_cam.CFrame.Position - _pos).Magnitude or 100
+        local _distFactor = math.clamp(_dist / 200, 0.5, 2)
+
+        _motionHistory[_id] = {pos = _pos, dt = _dt, time = os.clock()}
+        return _pos + _velocity * _Prefs.PredictionStrength * _distFactor
+    else
+        _motionHistory[_id] = {pos = _pos, dt = _dt, time = os.clock()}
+        return _pos
+    end
+end
+
+local function _cleanupMotionHistory()
+    local _count = 0
+    for _ in pairs(_motionHistory) do _count = _count + 1 end
+
+    if _count > 100 then
+        local _stale = {}
+        for _id, _data in pairs(_motionHistory) do
+            if os.clock() - (_data.time or 0) > 5 then
+                table.insert(_stale, _id)
+            end
+        end
+        for _, _id in ipairs(_stale) do
+            _motionHistory[_id] = nil
+        end
+    end
+
+    local _now = os.clock()
+    for _id, _data in pairs(_smoothCache) do
+        if _now - (_data.t or 0) > 3 then
+            _smoothCache[_id] = nil
+        end
+    end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Team Affiliation Check
+-- ═══════════════════════════════════════════════════════
+
+local function _isAllied(_player, _entity)
+    if not _Prefs.TeamCheck then return false end
+
+    if _entity and _FighterController and _FighterController.LocalFighter then
+        local _ok, _result = pcall(function()
+            local _localFighter = _FighterController.LocalFighter
+            if type(_entity) ~= "table" or type(_entity.Get) ~= "function" then return false end
+            if type(_localFighter.Get) ~= "function" then return false end
+
+            local _eTeam = _entity:Get("TeamID")
+            local _lTeam = _localFighter:Get("TeamID")
+            if _lTeam and _eTeam and _lTeam == _eTeam then return true end
+
+            local _eEnv = _entity:Get("EnvironmentID")
+            local _lEnv = _localFighter:Get("EnvironmentID")
+            if _lEnv and _eEnv and _lEnv ~= _eEnv then return true end
+
+            local _eDuel = _entity:Get("DuelID") or _entity:Get("MatchID")
+            local _lDuel = _localFighter:Get("DuelID") or _localFighter:Get("MatchID")
+            if _lDuel and _eDuel and _lDuel ~= _eDuel then return true end
+
+            local _eState = _entity:Get("State") or _entity:Get("CombatState")
+            if _eState and (_eState == "Dead" or _eState == "Downed" or _eState == "Spectating") then
+                return true
+            end
+
+            return false
+        end)
+        if _ok and _result then return true end
+    end
+
+    if _player and typeof(_player) == "Instance" and _player:IsA("Player") then
+        if _player.Team and _ActiveUser.Team and _player.Team == _ActiveUser.Team then
+            return true
+        end
+    end
+
+    return false
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Session Kill Tracking
+-- ═══════════════════════════════════════════════════════
+
+local function _updateSessionKills()
+    for _, _p in ipairs(_PlayerService:GetPlayers()) do
+        if _p ~= _ActiveUser then
+            pcall(function()
+                local _char = _p.Character
+                if not _char then return end
+                local _hum = _char:FindFirstChildOfClass("Humanoid")
+                if not _hum then
+                    _healthTracker[_p.UserId] = nil
+                    return
+                end
+
+                local _prevHP = _healthTracker[_p.UserId]
+                if _prevHP and _prevHP > 1 and _hum.Health <= 0 then
+                    if _currentAimTarget and _currentAimTarget.char == _char then
+                        _sessionKills = _sessionKills + 1
+                        _Renderer.NotifyKill(_p.DisplayName or _p.Name)
+                    end
+                end
+
+                _healthTracker[_p.UserId] = _hum.Health > 0 and _hum.Health or nil
+            end)
+        end
+    end
+end
+
+_PlayerService.PlayerRemoving:Connect(function(_p)
+    _healthTracker[_p.UserId] = nil
+end)
+
+-- ═══════════════════════════════════════════════════════
+--  Camera Assist
+-- ═══════════════════════════════════════════════════════
+
+local function _applyCameraAssist(_targetPos, _dt)
+    if _Prefs.FirstPersonOnly and not _isFirstPerson() then return end
+    if _Renderer.isOpen then return end
+
+    local _cam = workspace.CurrentCamera
+    if not _cam then return end
+
+    local _dist = (_cam.CFrame.Position - _targetPos).Magnitude
+    if _dist > _Prefs.AimRange then return end
+
+    local _screenPos, _onScreen = _cam:WorldToViewportPoint(_targetPos)
+    if not _onScreen then return end
+
+    local _cx, _cy = _Renderer.getCenter()
+    local _screenDist = math.sqrt((_screenPos.X - _cx) ^ 2 + (_screenPos.Y - _cy) ^ 2)
+    if _screenDist > _Prefs.FOV then return end
+
+    local _dtNorm = math.clamp(_dt * 60, 0.3, 4)
+    local _baseSpeed = _Prefs.AimSpeed / 10
+    local _smoothInv = 1 - _Prefs.SmoothFactor
+    local _distFactor = math.clamp(1 - (_dist / _Prefs.AimRange) * 0.2, 0.6, 1)
+    local _centerFactor = math.clamp(1 - (_screenDist / _Prefs.FOV) * 0.3, 0.7, 1)
+
+    local _smoothVal = math.clamp(
+        _baseSpeed * _smoothInv * _dtNorm * _distFactor * _centerFactor,
+        0.03, 0.95
+    )
+
+    _rotateCameraToward(_targetPos, _smoothVal, _cam.CFrame.Position)
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Target Enumeration
+-- ═══════════════════════════════════════════════════════
+
+local function _enumerateTargets()
+    local _targets = {}
+
+    local _success, _err = _SafeInvoke("enumerateTargets", function()
+        if _FighterController then
+            pcall(function()
+                local _localFighter = _FighterController.LocalFighter
+                for _, _fighter in pairs(_FighterController.Objects) do
+                    pcall(function()
+                        if _fighter == _localFighter then return end
+                        if not _fighter.Entity or not _fighter.Entity.RootPart then return end
+
+                        local _hum = _fighter.Entity.Humanoid
+                        if not _hum or _hum.Health <= 0 then return end
+
+                        local _pl = _fighter.Entity.Player
+                        if _isAllied(_pl, _fighter) then return end
+
+                        local _char = _fighter.Entity.RootPart.Parent
+                        local _refPart = _getReferencePart(_char) or _fighter.Entity.RootPart
+
+                        _targets[#_targets + 1] = {
+                            part     = _refPart,
+                            hum      = _hum,
+                            char     = _char,
+                            hrp      = _fighter.Entity.RootPart,
+                            name     = _pl and (_pl.DisplayName or _pl.Name)
+                                       or (_char and _char.Name) or "?",
+                            isPlayer = true,
+                            player   = _pl
+                        }
+                    end)
+                end
+            end)
+        else
+            for _, _p in ipairs(_PlayerService:GetPlayers()) do
+                if _p ~= _ActiveUser and not _isAllied(_p) then
+                    pcall(function()
+                        local _char = _p.Character
+                        if not _char or not _char.Parent then return end
+                        local _hrp = _char:FindFirstChild("HumanoidRootPart")
+                        if not _hrp then return end
+                        local _hum = _char:FindFirstChildOfClass("Humanoid")
+                        if not _hum or _hum.Health <= 0 then return end
+                        local _refPart = _getReferencePart(_char)
+                        if not _refPart then return end
+
+                        _targets[#_targets + 1] = {
+                            part     = _refPart,
+                            hum      = _hum,
+                            char     = _char,
+                            hrp      = _hrp,
+                            name     = _p.DisplayName or _p.Name,
+                            isPlayer = true,
+                            player   = _p
+                        }
+                    end)
+                end
+            end
+        end
+
+        if _EntityController then
+            pcall(function()
+                for _, _npc in pairs(_EntityController.Objects) do
+                    pcall(function()
+                        if not _npc.Entity or not _npc.Entity.RootPart then return end
+                        local _hum = _npc.Entity.Humanoid
+                        if not _hum or _hum.Health <= 0 then return end
+
+                        local _char = _npc.Entity.RootPart.Parent
+                        local _refPart = _getReferencePart(_char) or _npc.Entity.RootPart
+
+                        _targets[#_targets + 1] = {
+                            part     = _refPart,
+                            hum      = _hum,
+                            char     = _char,
+                            hrp      = _npc.Entity.RootPart,
+                            name     = _char and _char.Name or "NPC",
+                            isPlayer = false
+                        }
+                    end)
+                end
+            end)
+        end
+    end)
+
+    if not _success then
+        _DiagLog:Add("enumerateTargets", _err)
+    end
+
+    return _targets
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Target Selection
+-- ═══════════════════════════════════════════════════════
+
+local function _findClosestTarget(_targets, _dt)
+    local _cam = workspace.CurrentCamera
+    if not _cam then return nil end
+
+    local _cx, _cy = _Renderer.getCenter()
+    local _camPos = _cam.CFrame.Position
+
+    if _Prefs.StickTarget and _lockedTarget then
+        for _, _t in ipairs(_targets) do
+            if _t.char == _lockedTarget.char
+               and _t.part and _t.part.Parent
+               and _t.hum and _t.hum.Health > 0
+               and (_camPos - _t.part.Position).Magnitude <= _Prefs.AimRange then
+                return _t
+            end
+        end
+        _lockedTarget = nil
+    end
+
+    local _best, _bestScore = nil, 9999
+    for _, _t in ipairs(_targets) do
+        if _t.part and _t.part.Parent then
+            local _worldDist = (_camPos - _t.part.Position).Magnitude
+            if _worldDist <= _Prefs.AimRange then
+                local _sp, _on = _cam:WorldToViewportPoint(_t.part.Position)
+                if _on then
+                    local _screenDist = math.sqrt((_sp.X - _cx) ^ 2 + (_sp.Y - _cy) ^ 2)
+                    if _screenDist <= _Prefs.FOV then
+                        if not _Prefs.AimVisCheck or _isPartVisible(_t.part) then
+                            local _hpFactor = 1
+                            if _t.hum and _t.hum.MaxHealth > 0 then
+                                _hpFactor = _t.hum.Health / _t.hum.MaxHealth
+                            end
+                            local _score = _screenDist * (0.5 + _hpFactor * 0.5)
+                            if _score < _bestScore then
+                                _bestScore = _score
+                                _best = _t
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    if _best and _Prefs.StickTarget then
+        _lockedTarget = _best
+    end
+
+    return _best
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Bunny Hop System
+-- ═══════════════════════════════════════════════════════
+
+local function _updateBhop(_dt)
+    if not _Prefs.BhopEnabled then return end
+
+    local _mc = _ActiveUser.Character
+    if not _mc then return end
+    local _hum = _mc:FindFirstChildOfClass("Humanoid")
+    if not _hum or _hum.Health <= 0 then return end
+    local _mh = _getRootPart(_mc)
+    if not _mh then return end
+
+    local _moveDir = _hum.MoveDirection
+    if _moveDir.Magnitude < 0.1 then return end
+
+    if not _isGrounded(_mc) then return end
+
+    local _now = os.clock()
+    local _delay = math.max(_Prefs.BhopJumpDelay or 0.12, 0.05)
+    if (_now - _lastBhopTime) < _delay then return end
+
+    _lastBhopTime = _now
+    pcall(function()
+        _hum:ChangeState(Enum.HumanoidStateType.Jumping)
+    end)
+end
+
+-- [REMOVED FORCETHIRDPERSON]
+
+-- ═══════════════════════════════════════════════════════
+--  O B F U S C A T E D  &  I M P R O V E D  T R I G G E R B O T
+--  [0x00A1] Max precision algorithm (Rage Mode compatible)
+-- ═══════════════════════════════════════════════════════
+
+local function _0xT1_ProjBounds(_c, _p, _x, _y)
+    local _s, _cf = _p.Size, _p.CFrame
+    local _hX, _hY, _hZ = _s.X * 0.5, _s.Y * 0.5, _s.Z * 0.5
+    local _verts = {
+        _cf * Vector3.new(-_hX, -_hY, -_hZ), _cf * Vector3.new( _hX, -_hY, -_hZ),
+        _cf * Vector3.new(-_hX,  _hY, -_hZ), _cf * Vector3.new( _hX,  _hY, -_hZ),
+        _cf * Vector3.new(-_hX, -_hY,  _hZ), _cf * Vector3.new( _hX, -_hY,  _hZ),
+        _cf * Vector3.new(-_hX,  _hY,  _hZ), _cf * Vector3.new( _hX,  _hY,  _hZ),
+    }
+    local _mX, _mY, _mXX, _mYY = math.huge, math.huge, -math.huge, -math.huge
+    for _, _v in ipairs(_verts) do
+        local _sp, _os = _c:WorldToViewportPoint(_v)
+        if not _os then return false end
+        if _sp.X < _mX then _mX = _sp.X end
+        if _sp.X > _mXX then _mXX = _sp.X end
+        if _sp.Y < _mY then _mY = _sp.Y end
+        if _sp.Y > _mYY then _mYY = _sp.Y end
+    end
+    return _x >= _mX and _x <= _mXX and _y >= _mY and _y <= _mYY
+end
+
+local function _0xT2_GetHitboxes(_ch)
+    if not _ch then return {} end
+    local _p = {}
+    for _, _v in ipairs(_ch:GetDescendants()) do
+        if _v:IsA("BasePart") and _v.Transparency < 1 and _v.Name ~= "HumanoidRootPart" then
+            _p[#_p+1] = _v
+        end
+    end
+    return _p
+end
+
+local function _runAutoInteraction(_targets)
+    if not _Prefs.Triggerbot then return end
+    if _Prefs.FirstPersonOnly and not _isFirstPerson() then return end
+
+    local _cam = workspace.CurrentCamera
+    if not _cam then return end
+
+    local _n = os.clock()
+    if _n - _lastAutoTime < (_Prefs.TrigBotDelay or 0.10) then return end
+
+    local _mc = _ActiveUser.Character
+    local _cp = _cam.CFrame.Position
+    local _md = _Prefs.TrigBotMaxDist or _Prefs.AimRange or 200
+    local _cx, _cy = _Renderer.getCenter()
+
+    local _cMap = {}
+    for _, _t in ipairs(_targets) do
+        if _t.char and _t.char.Parent and _t.hum and _t.hum.Health > 0 then
+            local _wd = _t.hrp and (_cp - _t.hrp.Position).Magnitude or 9999
+            if _wd <= _md then _cMap[_t.char] = _t end
+        end
+    end
+
+    local _rp = RaycastParams.new()
+    _rp.FilterType = Enum.RaycastFilterType.Exclude
+    _rp.FilterDescendantsInstances = _mc and {_mc} or {}
+
+    local _hit = workspace:Raycast(_cp, _cam.CFrame.LookVector * _md, _rp)
+    if _hit and _hit.Instance then
+        local _chk = _hit.Instance
+        while _chk do
+            if _cMap[_chk] then
+                _lastAutoTime = _n
+                _hitFeedbackTime = _n
+                pcall(_simulateInteraction)
+                return
+            end
+            _chk = _chk.Parent
+        end
+    end
+
+    -- Secondary check for micro-gaps / lag compensation
+    local _radiusCheck = _Renderer.isRageMode and 15 or 0 
+    for _ch, _t in pairs(_cMap) do
+        local _hb = _0xT2_GetHitboxes(_ch)
+        for _, _p in ipairs(_hb) do
+            local _pd = (_cp - _p.Position).Magnitude
+            if _pd <= _md then
+                if _0xT1_ProjBounds(_cam, _p, _cx, _cy) then
+                    if not _Prefs.TrigBotVisOnly or _isPartVisible(_p, _mc) then
+                        _lastAutoTime = _n
+                        _hitFeedbackTime = _n
+                        pcall(_simulateInteraction)
+                        return
+                    end
+                elseif _radiusCheck > 0 then
+                    local _sp, _os = _cam:WorldToViewportPoint(_p.Position)
+                    if _os and Vector2.new(_sp.X - _cx, _sp.Y - _cy).Magnitude <= _radiusCheck then
+                        if not _Prefs.TrigBotVisOnly or _isPartVisible(_p, _mc) then
+                            _lastAutoTime = _n
+                            _hitFeedbackTime = _n
+                            pcall(_simulateInteraction)
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Drawing Object Factories
+-- ═══════════════════════════════════════════════════════
+
+local function _newLine(_thick, _color, _transparency)
+    local _d = Drawing.new("Line")
+    _d.Visible      = false
+    _d.Thickness     = _thick or 1
+    _d.Color         = _color or _Palette.W
+    _d.Transparency  = _transparency or 0
+    _allDrawings[#_allDrawings + 1] = _d
+    return _d
+end
+
+local function _newCircle(_radius, _color, _filled, _transparency)
+    local _d = Drawing.new("Circle")
+    _d.Visible      = false
+    _d.Radius        = _radius or 5
+    _d.Color         = _color or _Palette.W
+    _d.Filled        = _filled or false
+    _d.NumSides      = 1000
+    _d.Thickness     = _filled and 0 or 1.5
+    _d.Transparency  = _transparency or 0
+    _allDrawings[#_allDrawings + 1] = _d
+    return _d
+end
+
+local function _newText(_size, _color)
+    local _d = Drawing.new("Text")
+    _d.Visible = false
+    _d.Size    = _size or 13
+    _d.Color   = _color or _Palette.W
+    _d.Center  = true
+    pcall(function()
+        _d.Outline      = true
+        _d.OutlineColor = Color3.new(0, 0, 0)
+    end)
+    _allDrawings[#_allDrawings + 1] = _d
+    return _d
+end
+
+local function _newSquare(_color, _filled, _transparency)
+    local _d = Drawing.new("Square")
+    _d.Visible      = false
+    _d.Color         = _color or _Palette.W
+    _d.Filled        = _filled or false
+    _d.Thickness     = _filled and 0 or 1
+    _d.Transparency  = _transparency or 0
+    _allDrawings[#_allDrawings + 1] = _d
+    return _d
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Overlay Drawing Objects
+-- ═══════════════════════════════════════════════════════
+
+local _fovRing1 = _newCircle(150, Color3.fromRGB(120, 60, 220), false, 0.45)
+_fovRing1.Thickness = 1.2; _fovRing1.NumSides = 1000
+
+local _fovRing2 = _newCircle(153, Color3.fromRGB(120, 60, 220), false, 0.75)
+_fovRing2.Thickness = 0.6; _fovRing2.NumSides = 1000
+
+local _fovRing3 = _newCircle(156, Color3.fromRGB(120, 60, 220), false, 0.90)
+_fovRing3.Thickness = 0.3; _fovRing3.NumSides = 1000
+
+local _snapShadow = _newLine(3, Color3.new(0, 0, 0), 0.7)
+local _snapLine   = _newLine(1.5, Color3.fromRGB(120, 60, 220), 0.2)
+
+local _aimDot  = _newCircle(5, _Palette.W, true, 0.1); _aimDot.NumSides = 16
+local _aimRing = _newCircle(8, Color3.fromRGB(120, 60, 220), false, 0.3)
+_aimRing.NumSides = 24; _aimRing.Thickness = 1
+
+local _hitLines = {}
+for _i = 1, 4 do
+    _hitLines[_i] = _newLine(2, Color3.fromRGB(255, 80, 80), 0)
+end
+
+local _chShadow, _chLine = {}, {}
+for _i = 1, 4 do
+    _chShadow[_i] = _newLine(3, Color3.new(0, 0, 0), 0.6)
+    _chLine[_i]   = _newLine(1.5, _Palette.W, 0)
+end
+local _chDotShadow = _newCircle(3.5, Color3.new(0, 0, 0), true, 0.5)
+local _chDot       = _newCircle(2, _Palette.W, true, 0)
+
+local _diagLabels = {}
+for _i = 1, 8 do
+    _diagLabels[_i] = _newText(10, Color3.fromRGB(255, 180, 120))
+    _diagLabels[_i].Visible = false
+    _diagLabels[_i].Center  = false
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Skeleton Bone Definitions
+-- ═══════════════════════════════════════════════════════
+
+local _BONES_R15 = {
+    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"},
+    {"LeftLowerArm", "LeftHand"}, {"UpperTorso", "RightUpperArm"},
+    {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"},
+    {"LeftLowerLeg", "LeftFoot"}, {"LowerTorso", "RightUpperLeg"},
+    {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
+}
+
+local _BONES_R6 = {
+    {"Head", "Torso"}, {"Torso", "Left Arm"},
+    {"Torso", "Right Arm"}, {"Torso", "Left Leg"}, {"Torso", "Right Leg"}
+}
+
+local _MAX_BONE_LINES = 14
+
+local _BOX_EDGES = {
+    {1,2},{2,3},{3,4},{4,1},{5,6},{6,7},{7,8},{8,5},{1,5},{2,6},{3,7},{4,8}
+}
+
+-- ═══════════════════════════════════════════════════════
+--  Per-Player Overlay Slot Pool
+-- ═══════════════════════════════════════════════════════
+
+local _overlaySlots = {}
+for _i = 1, _MAX_OVERLAY_SLOTS do
+    local _s = {}
+
+    _s.bxL = {}; _s.bxS = {}
+    for _j = 1, 12 do
+        _s.bxS[_j] = _newLine(2.5, Color3.new(0, 0, 0), 0.65)
+        _s.bxL[_j] = _newLine(1.5, _Palette.W, 0)
+    end
+
+    _s.bn = {}; _s.bnS = {}
+    for _j = 1, _MAX_BONE_LINES do
+        _s.bnS[_j] = _newLine(2.2, Color3.new(0, 0, 0), 0.65)
+        _s.bn[_j]  = _newLine(1.0, _Palette.W, 0.05)
+    end
+
+    _s.hdS = _newCircle(7, Color3.new(0, 0, 0), true, 0.6)
+    _s.hd  = _newCircle(5, Color3.fromRGB(255, 80, 80), true, 0)
+
+    _s.hpB = _newSquare(Color3.fromRGB(8, 8, 8), true, 0.35)
+    _s.hpF = _newSquare(Color3.fromRGB(60, 210, 110), true, 0.10)
+
+    _s.nT  = _newText(13, _Palette.W)
+    _s.hpT = _newText(11, Color3.fromRGB(180, 240, 200))
+    _s.dT  = _newText(10, Color3.fromRGB(160, 140, 200))
+
+    _s.trS = _newLine(2.5, Color3.new(0, 0, 0), 0.65)
+    _s.tr  = _newLine(1.5, _Palette.W, 0.25)
+
+    _overlaySlots[_i] = _s
+end
+
+local _offscreenPool = {}
+for _i = 1, _MAX_OVERLAY_SLOTS do
+    _offscreenPool[_i] = {
+        a1 = _newLine(2, Color3.fromRGB(180, 180, 220), 0.15),
+        a2 = _newLine(2, Color3.fromRGB(180, 180, 220), 0.15)
+    }
+end
+local _offscreenUsed = 0
+
+-- ═══════════════════════════════════════════════════════
+--  Overlay Slot Management
+-- ═══════════════════════════════════════════════════════
+
+local function _hideSlot(_s)
+    _SafeInvoke("hideSlot", function()
+        for _i = 1, 12 do _s.bxS[_i].Visible = false; _s.bxL[_i].Visible = false end
+        for _i = 1, _MAX_BONE_LINES do _s.bnS[_i].Visible = false; _s.bn[_i].Visible = false end
+        _s.hdS.Visible = false; _s.hd.Visible = false
+        _s.hpB.Visible = false; _s.hpF.Visible = false
+        _s.nT.Visible  = false; _s.hpT.Visible = false
+        _s.dT.Visible  = false; _s.trS.Visible = false; _s.tr.Visible = false
+    end)
+end
+
+local function _hideAllOverlays()
+    for _i = 1, _MAX_OVERLAY_SLOTS do
+        pcall(_hideSlot, _overlaySlots[_i])
+    end
+    _snapShadow.Visible = false; _snapLine.Visible = false
+    _aimDot.Visible = false; _aimRing.Visible = false
+    for _, _l in ipairs(_hitLines) do _l.Visible = false end
+end
+
+local _activeSlots = {}
+local _lastOverlayUpdate = 0
+
+-- ═══════════════════════════════════════════════════════
+--  Overlay Color Resolution
+-- ═══════════════════════════════════════════════════════
+
+local function _resolveOverlayColor(_tg, _aimedTarget, _unused, _dist, _hpPercent)
+    if _Renderer.isRageMode then
+        local hue = (os.clock() * 1.5 + (_dist * 0.005)) % 1
+        return Color3.fromHSV(hue, 1, 1)
+    end
+    local _mode = _Prefs.ESPColorMode or 1
+
+    if _mode == 1 then
+        if _aimedTarget and _aimedTarget.char == _tg.char then
+            return Color3.fromRGB(255, 235, 80)
+        end
+        return _Renderer.getColor(os.clock(), 0)
+
+    elseif _mode == 2 then
+        if _aimedTarget and _aimedTarget.char == _tg.char then
+            return Color3.fromRGB(_Prefs.ESPFixedAim_R, _Prefs.ESPFixedAim_G, _Prefs.ESPFixedAim_B)
+        end
+        return Color3.fromRGB(_Prefs.ESPFixedEnemy_R, _Prefs.ESPFixedEnemy_G, _Prefs.ESPFixedEnemy_B)
+
+    else
+        local _dNorm = math.clamp(_dist / math.max(_Prefs.ESPRange, 1), 0, 1)
+        local _hNorm = _hpPercent
+        local _r = 255
+        local _g = math.floor(60 + (1 - _dNorm) * 150)
+        local _b = math.floor(80 + _hNorm * 120)
+
+        if _aimedTarget and _aimedTarget.char == _tg.char then
+            _r = 255; _g = 235; _b = 80
+        end
+
+        return Color3.fromRGB(_r, _g, _b)
+    end
+end
+
+local function _smoothScreenPoint(_id, _pos2d)
+    if not _pos2d then return nil end
+
+    local _now = os.clock()
+    local _cache = _smoothCache[_id]
+
+    if not _cache then
+        _smoothCache[_id] = {pos = _pos2d, t = _now}
+        return _pos2d
+    end
+
+    local _dt = math.max(_now - _cache.t, 0.0001)
+    local _maxJump = _Prefs.ESPMaxTeleport or 80
+    local _lerpAlpha = math.clamp((_Prefs.ESPLineSmooth or 0.35) * _dt * 60, 0.05, 1)
+    local _from = _cache.pos
+
+    local _dx = _pos2d.X - _from.X
+    local _dy = _pos2d.Y - _from.Y
+
+    if math.abs(_dx) > _maxJump or math.abs(_dy) > _maxJump then
+        _cache.pos = _pos2d
+        _cache.t   = _now
+        return _pos2d
+    end
+
+    local _newPos = Vector2.new(
+        _from.X + _dx * _lerpAlpha,
+        _from.Y + _dy * _lerpAlpha
+    )
+    _cache.pos = _newPos
+    _cache.t   = _now
+    return _newPos
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Offscreen Indicator
+-- ═══════════════════════════════════════════════════════
+
+local function _drawOffscreenIndicator(_cam, _vp, _tg, _dist, _color)
+    if not _Prefs.ShowOffscreen then return end
+    if not _tg.hrp or not _tg.hrp.Parent then return end
+
+    local _sp, _on = _cam:WorldToViewportPoint(_tg.hrp.Position)
+    if _on then return end
+
+    _offscreenUsed = _offscreenUsed + 1
+    if _offscreenUsed > _MAX_OVERLAY_SLOTS then return end
+
+    local _slot = _offscreenPool[_offscreenUsed]
+    local _center = Vector2.new(_vp.X * 0.5, _vp.Y * 0.5)
+    local _dir = Vector2.new(_sp.X - _center.X, _sp.Y - _center.Y)
+    if _dir.Magnitude < 1 then return end
+    _dir = _dir.Unit
+
+    local _margin = _Renderer.S(40)
+    local _bx = _vp.X * 0.5 - _margin
+    local _by = _vp.Y * 0.5 - _margin
+    local _kx = math.abs(_dir.X) > 0.001 and math.abs(_bx / _dir.X) or 9999
+    local _ky = math.abs(_dir.Y) > 0.001 and math.abs(_by / _dir.Y) or 9999
+    local _k = math.min(_kx, _ky)
+    local _edgePos = _center + _dir * _k
+    local _ang = math.atan2(_dir.Y, _dir.X)
+    local _arrowSize = _Renderer.S(10)
+
+    local _id = "off_" .. (_tg.name or tostring(_tg.hrp))
+    local _smoothed = _smoothScreenPoint(_id, _edgePos)
+
+    local _p1 = _smoothed + Vector2.new(-math.cos(_ang) * _arrowSize, -math.sin(_ang) * _arrowSize)
+    local _p2 = _smoothed + Vector2.new(math.cos(_ang + 2.5) * _arrowSize, math.sin(_ang + 2.5) * _arrowSize)
+    local _p3 = _smoothed + Vector2.new(math.cos(_ang - 2.5) * _arrowSize, math.sin(_ang - 2.5) * _arrowSize)
+
+    _slot.a1.From = _p1; _slot.a1.To = _p2
+    _slot.a1.Color = _color; _slot.a1.Visible = true
+
+    _slot.a2.From = _p1; _slot.a2.To = _p3
+    _slot.a2.Color = _color; _slot.a2.Visible = true
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Cleanup helpers
+-- ═══════════════════════════════════════════════════════
+
+local function _cleanupOverlaySlots()
+    for _i = 1, _MAX_OVERLAY_SLOTS do
+        if not _activeSlots[_i] then
+            _SafeInvoke("cleanupSlot", function()
+                _hideSlot(_overlaySlots[_i])
+            end)
+        end
+    end
+    _activeSlots = {}
+end
+
+local function _healthColor(_percent)
+    if _percent > 0.6 then return Color3.fromRGB(60, 215, 115)
+    elseif _percent > 0.3 then return Color3.fromRGB(255, 195, 50)
+    else return Color3.fromRGB(255, 55, 55) end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  3D Box Rendering
+-- ═══════════════════════════════════════════════════════
+
+local function _get3DCorners(_cf, _size)
+    local _x, _y, _z = _size.X * 0.5, _size.Y * 0.5, _size.Z * 0.5
+    return {
+        _cf * CFrame.new(-_x, -_y, -_z), _cf * CFrame.new(_x, -_y, -_z),
+        _cf * CFrame.new(_x, _y, -_z),   _cf * CFrame.new(-_x, _y, -_z),
+        _cf * CFrame.new(-_x, -_y, _z),  _cf * CFrame.new(_x, -_y, _z),
+        _cf * CFrame.new(_x, _y, _z),    _cf * CFrame.new(-_x, _y, _z)
+    }
+end
+
+local function _drawBox(_slot, _hrp, _color)
+    local _cam = workspace.CurrentCamera
+    if not _cam or not _hrp or not _hrp.Parent then return end
+
+    local _corners = _get3DCorners(_hrp.CFrame * CFrame.new(0, -0.5, 0), Vector3.new(4, 6, 2.5))
+    local _screenPts = {}
+
+    for _i = 1, 8 do
+        local _sp, _on = _cam:WorldToViewportPoint(_corners[_i].Position)
+        if not _on then
+            for _j = 1, 12 do
+                _slot.bxS[_j].Visible = false
+                _slot.bxL[_j].Visible = false
+            end
+            return
+        end
+        _screenPts[_i] = Vector2.new(_sp.X, _sp.Y)
+    end
+
+    local _bThick = _Renderer.S(_Prefs.BoxThick)
+    for _i = 1, 12 do
+        local _edge = _BOX_EDGES[_i]
+        _slot.bxS[_i].From = _screenPts[_edge[1]]
+        _slot.bxS[_i].To   = _screenPts[_edge[2]]
+        _slot.bxS[_i].Thickness = _bThick + _Renderer.S(1.2)
+        _slot.bxS[_i].Visible = true
+
+        _slot.bxL[_i].From  = _screenPts[_edge[1]]
+        _slot.bxL[_i].To    = _screenPts[_edge[2]]
+        _slot.bxL[_i].Color = _color
+        _slot.bxL[_i].Thickness = _bThick
+        _slot.bxL[_i].Visible = true
+    end
+end
+
+local function _getRigType(_char)
+    if not _char then return "?" end
+    if _char:FindFirstChild("UpperTorso") then return "R15" end
+    if _char:FindFirstChild("Torso") then return "R6" end
+    return "?"
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Skeleton Rendering
+-- ═══════════════════════════════════════════════════════
+
+local function _drawSkeleton(_slot, _char, _color)
+    local _cam = workspace.CurrentCamera
+    if not _cam or not _char or not _char.Parent then return end
+
+    local _rig = _getRigType(_char)
+    if _rig == "?" then
+        for _i = 1, _MAX_BONE_LINES do
+            _slot.bn[_i].Visible  = false
+            _slot.bnS[_i].Visible = false
+        end
+        return
+    end
+
+    local _boneList = _rig == "R15" and _BONES_R15 or _BONES_R6
+    local _idx = 0
+
+    for _, _pair in ipairs(_boneList) do
+        local _a = _char:FindFirstChild(_pair[1])
+        local _b = _char:FindFirstChild(_pair[2])
+
+        if _a and _b and _a:IsA("BasePart") and _b:IsA("BasePart") then
+            _idx = _idx + 1
+            if _idx > _MAX_BONE_LINES then break end
+
+            local _sA, _oA = _cam:WorldToViewportPoint(_a.Position)
+            local _sB, _oB = _cam:WorldToViewportPoint(_b.Position)
+
+            if _oA and _oB then
+                local _pA = Vector2.new(_sA.X, _sA.Y)
+                local _pB = Vector2.new(_sB.X, _sB.Y)
+
+                _slot.bnS[_idx].From = _pA; _slot.bnS[_idx].To = _pB
+                _slot.bnS[_idx].Thickness = _Renderer.S(2.2)
+                _slot.bnS[_idx].Visible = true
+
+                _slot.bn[_idx].From  = _pA; _slot.bn[_idx].To = _pB
+                _slot.bn[_idx].Color = _color
+                _slot.bn[_idx].Visible = true
+            else
+                _slot.bnS[_idx].Visible = false
+                _slot.bn[_idx].Visible  = false
+            end
+        end
+    end
+
+    for _i = _idx + 1, _MAX_BONE_LINES do
+        _slot.bnS[_i].Visible = false
+        _slot.bn[_i].Visible  = false
+    end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Hit Feedback / Crosshair / Debug
+-- ═══════════════════════════════════════════════════════
+
+local function _drawHitFeedback(_cx, _cy)
+    local _elapsed = os.clock() - _hitFeedbackTime
+    local _active = _elapsed < 0.3
+    local _fade = _active and math.clamp(1 - _elapsed / 0.3, 0, 1) or 0
+    local _hS = _Renderer.S(12)
+    local _gap = _Renderer.S(6)
+    local _expand = (1 - _fade) * _Renderer.S(4)
+
+    local _pts = {
+        {Vector2.new(_cx - _gap - _hS - _expand, _cy), Vector2.new(_cx - _gap, _cy)},
+        {Vector2.new(_cx + _gap, _cy), Vector2.new(_cx + _gap + _hS + _expand, _cy)},
+        {Vector2.new(_cx, _cy - _gap - _hS - _expand), Vector2.new(_cx, _cy - _gap)},
+        {Vector2.new(_cx, _cy + _gap), Vector2.new(_cx, _cy + _gap + _hS + _expand)}
+    }
+
+    for _i, _p in ipairs(_pts) do
+        _hitLines[_i].From = _p[1]; _hitLines[_i].To = _p[2]
+        _hitLines[_i].Transparency = 1 - _fade
+        _hitLines[_i].Color = Color3.fromRGB(255, math.floor(70 + _fade * 180), 70)
+        _hitLines[_i].Thickness = _Renderer.S(1.5 + _fade)
+        _hitLines[_i].Visible = _active and _Prefs.ShowHitmarker
+    end
+end
+
+local function _drawCrosshair(_cx, _cy)
+    if not _Prefs.CustomCrosshair then
+        for _i = 1, 4 do _chShadow[_i].Visible = false; _chLine[_i].Visible = false end
+        _chDotShadow.Visible = false; _chDot.Visible = false
+        return
+    end
+
+    local _color = _getCrosshairColor()
+    local _sz  = _Renderer.S(_Prefs.CrosshairSize)
+    local _gap = _Renderer.S(_Prefs.CrosshairGap)
+    local _th  = _Renderer.S(_Prefs.CrosshairThick)
+
+    local _positions = {
+        {Vector2.new(_cx, _cy - _gap - _sz), Vector2.new(_cx, _cy - _gap)},
+        {Vector2.new(_cx, _cy + _gap), Vector2.new(_cx, _cy + _gap + _sz)},
+        {Vector2.new(_cx - _gap - _sz, _cy), Vector2.new(_cx - _gap, _cy)},
+        {Vector2.new(_cx + _gap, _cy), Vector2.new(_cx + _gap + _sz, _cy)}
+    }
+
+    for _i = 1, 4 do
+        _chShadow[_i].From = _positions[_i][1]; _chShadow[_i].To = _positions[_i][2]
+        _chShadow[_i].Thickness = _th + _Renderer.S(2); _chShadow[_i].Visible = true
+
+        _chLine[_i].From = _positions[_i][1]; _chLine[_i].To = _positions[_i][2]
+        _chLine[_i].Thickness = _th; _chLine[_i].Color = _color; _chLine[_i].Visible = true
+    end
+
+    _chDotShadow.Position = Vector2.new(_cx, _cy)
+    _chDotShadow.Radius   = _Renderer.S(3.5)
+    _chDotShadow.Visible  = _Prefs.CrosshairDot
+
+    _chDot.Position = Vector2.new(_cx, _cy)
+    _chDot.Radius   = _Renderer.S(2)
+    _chDot.Color    = _color
+    _chDot.Visible  = _Prefs.CrosshairDot
+end
+
+local function _drawDiagLog(_vp)
+    if not _Prefs.ShowDebugLog then
+        for _i = 1, #_diagLabels do _diagLabels[_i].Visible = false end
+        return
+    end
+
+    local _lines = _DiagLog:GetLines(#_diagLabels)
+    local _startX = _vp.X * 0.01
+    local _startY = _vp.Y * 0.65
+
+    for _i = 1, #_diagLabels do
+        local _txt = _lines[_i]
+        if _txt then
+            _diagLabels[_i].Text     = _txt
+            _diagLabels[_i].Position = Vector2.new(_startX, _startY + _Renderer.S(14) * (_i - 1))
+            _diagLabels[_i].Visible  = true
+        else
+            _diagLabels[_i].Visible = false
+        end
+    end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Full ESP Overlay Rendering
+-- ═══════════════════════════════════════════════════════
+
+local function _drawOverlays(_targets, _aimedTarget)
+    if not _Prefs.ShowESP then _hideAllOverlays(); return end
+
+    local _cam = workspace.CurrentCamera
+    if not _cam then return end
+
+    local _now = os.clock()
+    local _updateInterval = 1 / math.clamp(_Prefs.ESPUpdateHz or 60, 10, 240)
+    if (_now - _lastOverlayUpdate) < _updateInterval then return end
+    _lastOverlayUpdate = _now
+
+    local _camPos = _cam.CFrame.Position
+    local _vp = _Renderer.getVP()
+    local _used = 0
+    _offscreenUsed = 0
+    _activeSlots = {}
+
+    for _, _tg in ipairs(_targets) do
+        if _used >= _MAX_OVERLAY_SLOTS then break end
+
+        local _hrp = _tg.hrp or _getRootPart(_tg.char)
+        if _hrp and _hrp.Parent then
+            local _dist = (_camPos - _hrp.Position).Magnitude
+            if _dist <= _Prefs.ESPRange then
+                local _sp, _on = _cam:WorldToViewportPoint(_hrp.Position)
+                local _hpP = 1
+                if _tg.hum and _tg.hum.MaxHealth > 0 then
+                    _hpP = math.clamp(_tg.hum.Health / _tg.hum.MaxHealth, 0, 1)
+                end
+
+                local _isAimed = _aimedTarget and _tg.char == _aimedTarget.char
+                local _col = _resolveOverlayColor(_tg, _aimedTarget, false, _dist, _hpP)
+
+                if _on then
+                    _used = _used + 1
+                    _activeSlots[_used] = true
+                    local _s = _overlaySlots[_used]
+                    local _inRange = _dist <= _Prefs.AimRange
+
+                    -- 3D Box
+                    if _Prefs.ShowBox3D then
+                        _drawBox(_s, _hrp, _col)
+                    else
+                        for _j = 1, 12 do _s.bxS[_j].Visible = false; _s.bxL[_j].Visible = false end
+                    end
+
+                    -- Skeleton
+                    if _Prefs.ShowSkeleton then
+                        _drawSkeleton(_s, _tg.char, _col)
+                    else
+                        for _j = 1, _MAX_BONE_LINES do _s.bnS[_j].Visible = false; _s.bn[_j].Visible = false end
+                    end
+
+                    -- Head dot
+                    if _Prefs.ShowHeadDot then
+                        local _head = _tg.char and _tg.char:FindFirstChild("Head")
+                        if _head then
+                            local _hs, _ho = _cam:WorldToViewportPoint(_head.Position)
+                            if _ho then
+                                local _sm = _smoothScreenPoint("hd_" .. tostring(_tg.char), Vector2.new(_hs.X, _hs.Y))
+                                local _h2 = _sm or Vector2.new(_hs.X, _hs.Y)
+                                _s.hdS.Position = _h2; _s.hdS.Radius = _Renderer.S(6); _s.hdS.Visible = true
+                                _s.hd.Position  = _h2; _s.hd.Radius  = _Renderer.S(4)
+                                _s.hd.Color     = _col; _s.hd.Visible = true
+                            else
+                                _s.hd.Visible = false; _s.hdS.Visible = false
+                            end
+                        else
+                            _s.hd.Visible = false; _s.hdS.Visible = false
+                        end
+                    else
+                        _s.hd.Visible = false; _s.hdS.Visible = false
+                    end
+
+                    -- Tracers
+                    if _Prefs.ShowTracers then
+                        local _smoothed = _smoothScreenPoint("tr_" .. tostring(_tg.char), Vector2.new(_sp.X, _sp.Y))
+                            or Vector2.new(_sp.X, _sp.Y)
+                        local _btm = Vector2.new(_vp.X * 0.5, _vp.Y)
+                        _s.trS.From = _btm; _s.trS.To = _smoothed
+                        _s.trS.Thickness = _Renderer.S(_Prefs.TracerThick + 1); _s.trS.Visible = true
+                        _s.tr.From = _btm; _s.tr.To = _smoothed
+                        _s.tr.Color = _col; _s.tr.Thickness = _Renderer.S(_Prefs.TracerThick); _s.tr.Visible = true
+                    else
+                        _s.tr.Visible = false; _s.trS.Visible = false
+                    end
+
+                    -- Compute screen-space bounding height
+                    local _topSP = _cam:WorldToViewportPoint(_hrp.Position + Vector3.new(0, 3.5, 0))
+                    local _botSP = _cam:WorldToViewportPoint(_hrp.Position + Vector3.new(0, -3.5, 0))
+                    local _boxH = math.abs(_topSP.Y - _botSP.Y)
+                    local _boxX = _sp.X
+                    local _boxY = math.min(_topSP.Y, _botSP.Y)
+
+                    -- Health bar
+                    if _Prefs.ShowHP and _boxH >= _Renderer.S(8) then
+                        local _barW = _Renderer.S(_Prefs.HPBarWidth)
+                        local _barX = _boxX - _boxH * 0.3 - _barW - _Renderer.S(5)
+                        local _fillH = math.max(_boxH * _hpP, 1)
+
+                        _s.hpB.Position = Vector2.new(_barX - 1, _boxY - 1)
+                        _s.hpB.Size     = Vector2.new(_barW + 2, _boxH + 2)
+                        _s.hpB.Visible  = true
+
+                        _s.hpF.Position = Vector2.new(_barX, _boxY + _boxH - _fillH)
+                        _s.hpF.Size     = Vector2.new(_barW, _fillH)
+                        _s.hpF.Color    = _healthColor(_hpP)
+                        _s.hpF.Visible  = true
+                    else
+                        _s.hpB.Visible = false; _s.hpF.Visible = false
+                    end
+
+                    -- Name label
+                    if _Prefs.ShowName then
+                        _s.nT.Text = tostring(_tg.name or "???")
+                        _s.nT.Size = _Renderer.S(_Prefs.NameSize)
+                        local _namePos = _smoothScreenPoint(
+                            "nm_" .. tostring(_tg.char),
+                            Vector2.new(_boxX, _boxY + _Renderer.S(_Prefs.NameOffsetY))
+                        ) or Vector2.new(_boxX, _boxY + _Renderer.S(_Prefs.NameOffsetY))
+                        _s.nT.Position = _namePos
+                        _s.nT.Color    = _col
+                        _s.nT.Visible  = true
+                    else
+                        _s.nT.Visible = false
+                    end
+
+                    -- HP text
+                    if _Prefs.ShowHP and _tg.hum then
+                        _s.hpT.Text = math.floor(_tg.hum.Health) .. "/" .. math.floor(_tg.hum.MaxHealth)
+                        _s.hpT.Position = Vector2.new(_boxX, _boxY + _boxH + _Renderer.S(_Prefs.HPOffsetY))
+                        _s.hpT.Size     = _Renderer.S(11)
+                        _s.hpT.Color    = _healthColor(_hpP)
+                        _s.hpT.Visible  = true
+                    else
+                        _s.hpT.Visible = false
+                    end
+
+                    -- Distance label
+                    if _Prefs.ShowDist then
+                        _s.dT.Text = math.floor(_dist) .. "m"
+                        _s.dT.Position = Vector2.new(_boxX, _boxY + _boxH + _Renderer.S(_Prefs.DistOffsetY))
+                        _s.dT.Size     = _Renderer.S(10)
+                        _s.dT.Color    = _inRange and Color3.fromRGB(150, 140, 200) or Color3.fromRGB(255, 80, 80)
+                        _s.dT.Visible  = true
+                    else
+                        _s.dT.Visible = false
+                    end
+                else
+                    _drawOffscreenIndicator(_cam, _vp, _tg, _dist, Color3.fromRGB(
+                        _Prefs.ESPFixedOffscreen_R,
+                        _Prefs.ESPFixedOffscreen_G,
+                        _Prefs.ESPFixedOffscreen_B
+                    ))
+                end
+            end
+        end
+    end
+
+    for _i = _used + 1, _MAX_OVERLAY_SLOTS do
+        pcall(_hideSlot, _overlaySlots[_i])
+    end
+    for _i = _offscreenUsed + 1, _MAX_OVERLAY_SLOTS do
+        _offscreenPool[_i].a1.Visible = false
+        _offscreenPool[_i].a2.Visible = false
+    end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Full Cleanup
+-- ═══════════════════════════════════════════════════════
+
+local function _cleanup()
+    for _, _conn in ipairs(_allConnections) do
+        pcall(function() _conn:Disconnect() end)
+    end
+    for _, _d in ipairs(_allDrawings) do
+        pcall(function() _d:Remove() end)
+    end
+    _Renderer.destroy()
+    _allConnections = {}
+    _allDrawings = {}
+end
+
+-- ═══════════════════════════════════════════════════════
+--  Character respawn handler
+-- ═══════════════════════════════════════════════════════
+
+_ActiveUser.CharacterAdded:Connect(function()
+    coroutine.wrap(function()
+        task.wait(1.5)
+        _motionHistory = {}
+    end)()
+end)
+
+-- ═══════════════════════════════════════════════════════
+--  Show loading splash and configure callbacks
+-- ═══════════════════════════════════════════════════════
+
+_Renderer.showLoadingScreen()
+
+_Renderer._onRageToggle = function()
+    if _Renderer.setRageMode then
+        local _newState = not _Renderer.isRageMode
+        _Renderer.setRageMode(_newState)
+        _Renderer.Notify("Rage", _newState and "Rage enhancements unlocked" or "Normal mode restored", 2)
+    end
+end
+
+-- ═══════════════════════════════════════════════════════
+--  GUI Tab Construction
+--  (Removed: Tab 3 Target, all Rage/Spin, all Dash)
+-- ═══════════════════════════════════════════════════════
+
+local _guiTargetName, _guiTargetHP
+
+-- === Tab 1: Combat ===
+_Renderer.makeSection(1, "Core")
+_Renderer.makeToggle(1, "Enabled", "Enabled", _Prefs, function(_v)
+    if not _v then _toggleState = false; _lockedTarget = nil end
+    _savePrefs()
+end)
+_Renderer.makeCycle(1, "Mode", {"Hold", "Toggle"}, "AimMode", _Prefs, function()
+    _toggleState = false; _savePrefs()
+end)
+_Renderer.makeCycle(1, "Part", {"Head", "HRP", "Chest"}, "AimPart", _Prefs, function() _savePrefs() end)
+_Renderer.makeRebind(1, "Aim Key", "AimKey", _Prefs, _allConnections)
+
+_Renderer.makeSection(1, "Camera")
+_Renderer.makeToggle(1, "1st Person Only", "FirstPersonOnly", _Prefs, function() _savePrefs() end)
+
+_Renderer.makeSection(1, "Range & Aim")
+_Renderer.makeSlider(1, "Range",   "AimRange",     10, 500, 10,   _Prefs, _allConnections)
+_Renderer.makeSlider(1, "FOV",     "FOV",          20, 500, 5,    _Prefs, _allConnections)
+_Renderer.makeSlider(1, "Speed",   "AimSpeed",     1,  20,  1,    _Prefs, _allConnections)
+_Renderer.makeSlider(1, "Smooth",  "SmoothFactor", 0,  0.95, 0.05, _Prefs, _allConnections)
+
+_Renderer.makeSection(1, "Advanced")
+_Renderer.makeToggle(1, "Vis Check",  "AimVisCheck", _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(1, "Stick",      "StickTarget", _Prefs, function(_v) if not _v then _lockedTarget = nil end; _savePrefs() end)
+_Renderer.makeToggle(1, "Prediction", "AimPrediction", _Prefs, function() _savePrefs() end)
+_Renderer.makeSlider(1, "Predict Strength", "PredictionStrength", 0.01, 0.5, 0.01, _Prefs, _allConnections)
+
+_Renderer.makeSection(1, "Triggerbot (Hitbox-Based)")
+_Renderer.makeToggle(1, "Triggerbot",       "Triggerbot",    _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(1, "TrigBot Vis Check", "TrigBotVisOnly", _Prefs, function() _savePrefs() end)
+_Renderer.makeSlider(1, "TrigBot Max Dist", "TrigBotMaxDist", 10, 500, 10,  _Prefs, _allConnections)
+_Renderer.makeSlider(1, "TrigBot Delay",    "TrigBotDelay",  0.02, 1, 0.01, _Prefs, _allConnections)
+_Renderer.makeToggle(1, "Hitmarker",        "ShowHitmarker", _Prefs, function() _savePrefs() end)
+_Renderer.makeInfo(1, "Triggerbot fires only when crosshair")
+_Renderer.makeInfo(1, "is exactly on enemy hitbox (like aim)")
+
+-- Bunnyhop moved to Movement tab (3)
+
+_Renderer.makeSection(1, "Info")
+_guiTargetName = _Renderer.makeLabel(1)
+_guiTargetName.Text = "off"
+_guiTargetHP = _Renderer.makeLabel(1)
+_guiTargetHP.TextSize = 11
+_guiTargetHP.Font = Enum.Font.Code
+
+-- === Tab 2: Visual ===
+_Renderer.makeSection(2, "ESP")
+_Renderer.makeToggle(2, "ESP", "ShowESP", _Prefs, function(_v) if not _v then _hideAllOverlays() end; _savePrefs() end)
+
+_Renderer.makeSection(2, "Chams")
+_Renderer.makeToggle(2, "Chams", "ShowChams", _Prefs, function(_v)
+    pcall(function() _Renderer.removeAllChams() end)
+    _savePrefs()
+end)
+_Renderer.makeSlider(2, "Fill Transparency",    "ChamsFillTransparency",    0, 1, 0.05, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Outline Transparency", "ChamsOutlineTransparency", 0, 1, 0.05, _Prefs, _allConnections)
+
+_Renderer.makeSection(2, "Elements")
+_Renderer.makeToggle(2, "3D Box",         "ShowBox3D",        _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "Skeleton",       "ShowSkeleton",     _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "Head Dot",       "ShowHeadDot",      _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "Tracers",        "ShowTracers",      _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "Snap Line",      "ShowSnapLine",     _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "Names",          "ShowName",         _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "HP",             "ShowHP",           _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "Distance",       "ShowDist",         _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "FOV Circle",     "ShowFOV",          _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "Target Circle",  "ShowTargetCircle", _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(2, "HUD",            "ShowHUD",          _Prefs, function() _savePrefs() end)
+
+_Renderer.makeSection(2, "Tuning")
+_Renderer.makeSlider(2, "Range",     "ESPRange",  30, 800, 10,  _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Box Thick", "BoxThick",  0.5, 5, 0.5,  _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Name Size", "NameSize",  8,  24, 1,    _Prefs, _allConnections)
+_Renderer.makeSlider(2, "HP Width",  "HPBarWidth", 1, 10, 1,    _Prefs, _allConnections)
+
+_Renderer.makeSection(2, "ESP Color Mode")
+_Renderer.makeCycle(2, "Color Mode", {"Theme", "Fixed", "Distance/HP"}, "ESPColorMode", _Prefs, function() _savePrefs() end)
+_Renderer.makeSlider(2, "Enemy R",      "ESPFixedEnemy_R",     0, 255, 5, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Enemy G",      "ESPFixedEnemy_G",     0, 255, 5, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Enemy B",      "ESPFixedEnemy_B",     0, 255, 5, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Aim R",        "ESPFixedAim_R",       0, 255, 5, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Aim G",        "ESPFixedAim_G",       0, 255, 5, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Aim B",        "ESPFixedAim_B",       0, 255, 5, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Offscreen R",  "ESPFixedOffscreen_R", 0, 255, 5, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Offscreen G",  "ESPFixedOffscreen_G", 0, 255, 5, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Offscreen B",  "ESPFixedOffscreen_B", 0, 255, 5, _Prefs, _allConnections)
+
+_Renderer.makeSection(2, "ESP Smoothing")
+_Renderer.makeSlider(2, "Line Smooth",   "ESPLineSmooth",  0.05, 1, 0.05, _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Max Teleport",  "ESPMaxTeleport",  10, 200, 5,   _Prefs, _allConnections)
+_Renderer.makeSlider(2, "Update Hz",     "ESPUpdateHz",     10, 240, 5,   _Prefs, _allConnections)
+
+_Renderer.makeSection(2, "Crosshair")
+_Renderer.makeToggle(2, "Crosshair",  "CustomCrosshair", _Prefs, function() _savePrefs() end)
+_Renderer.makeSlider(2, "CH Size",    "CrosshairSize",   4,  30, 1,    _Prefs, _allConnections)
+_Renderer.makeSlider(2, "CH Gap",     "CrosshairGap",    0,  20, 1,    _Prefs, _allConnections)
+_Renderer.makeSlider(2, "CH Thick",   "CrosshairThick",  0.5, 4, 0.5,  _Prefs, _allConnections)
+_Renderer.makeToggle(2, "CH Dot",     "CrosshairDot",    _Prefs, function() _savePrefs() end)
+_Renderer.makeSlider(2, "CH Red",     "CrosshairColor_R", 0, 255, 5,   _Prefs, _allConnections)
+_Renderer.makeSlider(2, "CH Green",   "CrosshairColor_G", 0, 255, 5,   _Prefs, _allConnections)
+_Renderer.makeSlider(2, "CH Blue",    "CrosshairColor_B", 0, 255, 5,   _Prefs, _allConnections)
+
+_Renderer.makeSection(2, "Window")
+_Renderer.makeCycle(2, "Window Size", {"Normal", "Compact", "Wide"}, "WindowMode", _Prefs, function()
+    local _nW, _nH = _Renderer.getWS(_Prefs)
+    _AnimationService:Create(_Renderer.W, TweenInfo.new(0.4, Enum.EasingStyle.Quint), {
+        Size     = UDim2.new(0, _nW, 0, _nH),
+        Position = UDim2.new(0.5, -_nW / 2, 0.5, -_nH / 2)
+    }):Play()
+    _savePrefs()
+end)
+
+-- === Tab 3 (Movement) / Rage Mode Only ===
+_Renderer.makeSection(3, "Movement")
+_Renderer.makeToggle(3, "Bunny Hop",      "BhopEnabled",   _Prefs, function() _savePrefs() end)
+_Renderer.makeSlider(3, "Bhop Delay",     "BhopJumpDelay", 0.05, 0.5, 0.01, _Prefs, _allConnections)
+
+-- === Tab 4: Binds ===
+_Renderer.makeSection(4, "Keybinds")
+_Renderer.makeInfo(4, "[INSERT] Toggle Menu")
+_Renderer.makeInfo(4, "Aim: " .. _Prefs.AimKey)
+
+-- === Tab 5: UI ===
+_Renderer.makeSection(5, "Configuration")
+
+local function _toBase64(_data)
+    local _b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    return ((_data:gsub('.', function(_x)
+        local _r, _bt = '', _x:byte()
+        for _i = 8, 1, -1 do
+            _r = _r .. (_bt % 2^_i - _bt % 2^(_i - 1) > 0 and '1' or '0')
+        end
+        return _r
+    end) .. '0000'):gsub('%d%d%d?%d?%d?%d?', function(_x)
+        if (#_x < 6) then return '' end
+        local _c = 0
+        for _i = 1, 6 do _c = _c + (_x:sub(_i, _i) == '1' and 2^(6 - _i) or 0) end
+        return _b:sub(_c + 1, _c + 1)
+    end) .. ({'', '==', '='})[#_data % 3 + 1])
+end
+
+local function _fromBase64(_data)
+    local _b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    _data = string.gsub(_data, '[^' .. _b .. '=]', '')
+    return (_data:gsub('.', function(_x)
+        if (_x == '=') then return '' end
+        local _r, _f = '', (_b:find(_x) - 1)
+        for _i = 6, 1, -1 do _r = _r .. (_f % 2^_i - _f % 2^(_i - 1) > 0 and '1' or '0') end
+        return _r
+    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(_x)
+        if (#_x < 8) then return '' end
+        local _c = 0
+        for _i = 1, 8 do _c = _c + (_x:sub(_i, _i) == '1' and 2^(8 - _i) or 0) end
+        return string.char(_c)
+    end))
+end
+
+_Renderer.makeButton(5, "Export Config (Clipboard)", function()
+    local _str = "CFG-MOON-" .. _toBase64(_DataSerializer:JSONEncode({CFG = _Prefs, UI = _Renderer.UIConfigs}))
+    if setclipboard then
+        setclipboard(_str)
+        _Renderer.Notify("Config", "Config copied to clipboard!", 3)
+    else
+        print(_str)
+        _Renderer.Notify("Config", "Config printed to console (no clipboard support)", 4)
+    end
+end)
+
+_Renderer.makeButton(5, "Import Config", function()
+    _Renderer.Notify("Config", "Enter Base64 string in chat", 3)
+    local _chatConn
+    _chatConn = _ActiveUser.Chatted:Connect(function(_msg)
+        if _msg:find("CFG-MOON-") then
+            pcall(function()
+                local _raw = _msg:gsub("CFG-MOON-", "")
+                local _decoded = _DataSerializer:JSONDecode(_fromBase64(_raw))
+                if _decoded.CFG then
+                    for _k, _v in pairs(_decoded.CFG) do
+                        if _Prefs[_k] ~= nil then
+                            _Prefs[_k] = _v
+                        end
+                    end
+                    if _decoded.UI then
+                        for _k, _v in pairs(_decoded.UI) do _Renderer.UIConfigs[_k] = _v end
+                    end
+                    pcall(function() _Renderer.removeAllChams() end)
+                    _Renderer.Notify("Config", "Configuration imported!", 3, Color3.fromRGB(100, 255, 100))
+                    _savePrefs()
+                end
+            end)
+            _chatConn:Disconnect()
+        end
+    end)
+    task.delay(10, function() if _chatConn then _chatConn:Disconnect() end end)
+end)
+
+-- === Tab 6: Cfg ===
+_Renderer.makeSection(6, "Settings")
+_Renderer.makeToggle(6, "Team Check", "TeamCheck", _Prefs, function() _savePrefs() end)
+
+_Renderer.makeSection(6, "Actions")
+_Renderer.makeButton(6, "Save Config", function()
+    _savePrefs()
+    _Renderer.Notify("Config", "Configuration saved", 2)
+end)
+_Renderer.makeButton(6, "Reset Config", function()
+    pcall(function()
+        if delfile and isfile and isfile(_PREFS_FILE) then delfile(_PREFS_FILE) end
+    end)
+    _Renderer.Notify("Config", "Config reset — rejoin to apply", 3, Color3.fromRGB(255, 200, 100))
+end)
+
+_Renderer.makeSection(6, "Info")
+_Renderer.makeInfo(6, "Config: " .. _PREFS_FILE)
+_Renderer.makeInfo(6, "CC=" .. (_CamController and "Y" or "N")
+    .. " FC=" .. (_FighterController and "Y" or "N")
+    .. " EC=" .. (_EntityController and "Y" or "N"))
+_Renderer.makeInfo(6, "MOON v4.2")
+
+_Renderer.makeSection(6, "Performance")
+_Renderer.makeToggle(6, "Auto Optimize",             "AutoOptimize",          _Prefs, function() _savePrefs() end)
+_Renderer.makeSlider(6, "Low FPS Threshold",         "LowFPSThreshold",       20, 90, 1, _Prefs, _allConnections)
+_Renderer.makeToggle(6, "Safe: Disable ESP details", "SafeDisableESPDetails", _Prefs, function() _savePrefs() end)
+_Renderer.makeToggle(6, "Safe: Disable Chams",       "SafeDisableChams",      _Prefs, function() _savePrefs() end)
+
+_Renderer.makeSection(6, "Debug")
+_Renderer.makeToggle(6, "Show Error Log HUD", "ShowDebugLog", _Prefs, function() _savePrefs() end)
+_Renderer.makeInfo(6, "Errors also print to output")
+
+-- === Tab 7: Patch Notes ===
+_Renderer.makeSection(7, "Patch Notes v4.2")
+_Renderer.makeInfo(7, "v4.2 — Removed: Spin Bot (broken)")
+_Renderer.makeInfo(7, "v4.2 — Removed: Dash system")
+_Renderer.makeInfo(7, "v4.2 — Removed: Target Lock / Orbit")
+_Renderer.makeInfo(7, "v4.2 — Triggerbot rewritten: hitbox-based")
+_Renderer.makeInfo(7, "v4.2 — TrigBot checks actual part bounding boxes")
+_Renderer.makeInfo(7, "v4.2 — TrigBot raycast + screen projection combo")
+_Renderer.makeInfo(7, "v4.2 — No more false triggers at distance")
+_Renderer.makeInfo(7, "v4.2 — Cleaner codebase, fewer errors")
+_Renderer.makeInfo(7, "v4.1 — Bunny hop system")
+_Renderer.makeInfo(7, "v4.0 — Clean release build")
+
+-- ═══════════════════════════════════════════════════════
+--  Menu Open/Close Callbacks
+-- ═══════════════════════════════════════════════════════
+
+_Renderer._onMenuOpen = function()
+    _assistActive = false
+    _toggleState = false
+    _InputAdapter.MouseBehavior    = Enum.MouseBehavior.Default
+    _InputAdapter.MouseIconEnabled = true
+end
+
+_Renderer._onMenuClose = function() end
+
+_Renderer._onClose = function()
+    _cleanup()
+end
+
+_Renderer.closeMenu(_Prefs)
+
+-- ═══════════════════════════════════════════════════════
+--  Input Bindings
+--  (Removed: Target key, Dash key)
+-- ═══════════════════════════════════════════════════════
+
+local _inputBeganConn = _InputAdapter.InputBegan:Connect(function(_inp, _gameProcessed)
+    if _inp.UserInputType == Enum.UserInputType.Keyboard then
+        if _inp.KeyCode == Enum.KeyCode.Insert then
+            if _Renderer.isOpen then
+                _Renderer.closeMenu(_Prefs)
+            else
+                _Renderer._onMenuOpen()
+                _Renderer.openMenu(_Prefs)
+            end
+            return
+        end
+
+        if _gameProcessed then return end
+
+        if _inp.KeyCode == _resolveKeyCode(_Prefs.AimKey) then
+            if _Prefs.Enabled then
+                if _Prefs.AimMode == 1 then
+                    _assistActive = true
+                else
+                    _toggleState = not _toggleState
+                    _assistActive = _toggleState
+                end
+            end
+        end
+    end
+end)
+table.insert(_allConnections, _inputBeganConn)
+
+local _inputEndedConn = _InputAdapter.InputEnded:Connect(function(_inp)
+    if _inp.UserInputType == Enum.UserInputType.Keyboard then
+        if _inp.KeyCode == _resolveKeyCode(_Prefs.AimKey) then
+            if _Prefs.AimMode == 1 then
+                _assistActive = false
+            end
+        end
+    end
+end)
+table.insert(_allConnections, _inputEndedConn)
+
+local _inputMoveConn = _InputAdapter.InputChanged:Connect(function(_inp)
+    if _inp.UserInputType == Enum.UserInputType.MouseMovement then
+        _Renderer.handleDrag(_inp.Position)
+    end
+end)
+table.insert(_allConnections, _inputMoveConn)
+
+-- ═══════════════════════════════════════════════════════
+--  Main Heartbeat Loop
+--  (Removed: orbit, spin, dash logic)
+-- ═══════════════════════════════════════════════════════
+
+local _fpsCounter, _fpsAccum = 0, 0
+local _cleanupTimer = 0
+
+local _mainLoopConn = _HeartbeatSignal:Connect(function(_dt)
+    _globalClock = os.clock()
+
+    -- FPS measurement
+    _fpsAccum = _fpsAccum + _dt
+    _fpsCounter = _fpsCounter + 1
+    if _fpsAccum >= 1 then
+        _currentFPS = _fpsCounter
+        _fpsCounter = 0
+        _fpsAccum = 0
+    end
+
+    -- Periodic cleanup
+    _cleanupTimer = _cleanupTimer + 1
+    if _cleanupTimer >= _currentFPS * 5 then
+        _cleanupTimer = 0
+        _cleanupMotionHistory()
+        _cleanupOverlaySlots()
+        _LifecycleTracker:Cleanup()
+    end
+
+    -- Auto performance optimization
+    if _Prefs.AutoOptimize and _currentFPS > 0 and _currentFPS < (_Prefs.LowFPSThreshold or 35) then
+        if _Prefs.SafeDisableESPDetails then
+            _Prefs.ShowSkeleton = false
+            _Prefs.ShowTracers  = false
+            _Prefs.ShowHeadDot  = true
+        end
+        if _Prefs.SafeDisableChams then _Prefs.ShowChams = false end
+    end
+
+    -- Keep mouse unlocked while menu is open
+    if _Renderer.isOpen then
+        _InputAdapter.MouseBehavior    = Enum.MouseBehavior.Default
+        _InputAdapter.MouseIconEnabled = true
+    end
+
+    -- Session analytics
+    _updateSessionKills()
+
+    -- Enumerate targets (single pass)
+    local _targets = _enumerateTargets()
+    _currentAimTarget = nil
+
+    -- Bunny hop system
+    _updateBhop(_dt)
+
+    -- [REMOVED FORCETHIRDPERSON]
+
+    -- Camera assist (aim)
+    if _Prefs.Enabled and _assistActive and not _Renderer.isOpen then
+        _currentAimTarget = _findClosestTarget(_targets, _dt)
+        if _currentAimTarget then
+            local _aimPos = _getPredictedPosition(_currentAimTarget, _dt)
+            if _aimPos then
+                _applyCameraAssist(_aimPos, _dt)
+            end
+        end
+    end
+
+    -- Auto-interaction (improved hitbox triggerbot)
+    if not _Renderer.isOpen then
+        _runAutoInteraction(_targets)
+    end
+
+    -- Highlight system (chams)
+    _Renderer.updateChams(_targets, _Prefs)
+
+    -- ── Drawing Updates ──
+    local _cam = workspace.CurrentCamera
+    local _cx, _cy = _Renderer.getCenter()
+
+    -- FOV guide circles
+    if _Prefs.ShowFOV and _Prefs.Enabled and not _Renderer.isOpen then
+        local _col1 = _Renderer.getColor(_globalClock, 0)
+        local _col2 = _Renderer.getColor(_globalClock, 1)
+        local _alpha = _Renderer.UIConfigs.UITransparency or 0.15
+
+        _fovRing1.Position     = Vector2.new(_cx, _cy)
+        _fovRing1.Radius       = _Prefs.FOV
+        _fovRing1.Color        = _col1
+        _fovRing1.Transparency = math.clamp(0.45 - _alpha, 0.1, 1)
+        _fovRing1.Visible      = true
+
+        _fovRing2.Position     = Vector2.new(_cx, _cy)
+        _fovRing2.Radius       = _Prefs.FOV + 3
+        _fovRing2.Color        = _col2
+        _fovRing2.Transparency = math.clamp(0.75 - _alpha, 0.1, 1)
+        _fovRing2.Visible      = true
+
+        _fovRing3.Position     = Vector2.new(_cx, _cy)
+        _fovRing3.Radius       = _Prefs.FOV + 6
+        _fovRing3.Color        = _col2
+        _fovRing3.Transparency = math.clamp(0.9 - _alpha, 0.1, 1)
+        _fovRing3.Visible      = true
+    else
+        _fovRing1.Visible = false
+        _fovRing2.Visible = false
+        _fovRing3.Visible = false
+    end
+
+    -- Snap line to aimed target
+    if _Prefs.ShowSnapLine and _currentAimTarget and _currentAimTarget.part and _cam and not _Renderer.isOpen then
+        local _sp, _on = _cam:WorldToViewportPoint(_currentAimTarget.part.Position)
+        if _on then
+            local _pt = Vector2.new(_sp.X, _sp.Y)
+            local _ct = Vector2.new(_cx, _cy)
+            _snapShadow.From = _ct; _snapShadow.To = _pt; _snapShadow.Visible = true
+            _snapLine.From = _ct; _snapLine.To = _pt
+            _snapLine.Color = _Renderer.getAuroraColor(_globalClock, 0.5)
+            _snapLine.Visible = true
+        else
+            _snapShadow.Visible = false; _snapLine.Visible = false
+        end
+    else
+        _snapShadow.Visible = false; _snapLine.Visible = false
+    end
+
+    -- Aim indicator dot/ring
+    if _currentAimTarget and _currentAimTarget.part and _cam and not _Renderer.isOpen then
+        local _sp, _on = _cam:WorldToViewportPoint(_currentAimTarget.part.Position)
+        if _on then
+            local _pt = Vector2.new(_sp.X, _sp.Y)
+            _aimDot.Position = _pt; _aimDot.Visible = true
+            _aimRing.Position = _pt
+            _aimRing.Color = _Renderer.getAuroraColor(_globalClock, 0.8)
+            _aimRing.Visible = true
+        else
+            _aimDot.Visible = false; _aimRing.Visible = false
+        end
+    else
+        _aimDot.Visible = false; _aimRing.Visible = false
+    end
+
+    -- Hit feedback, crosshair
+    _drawHitFeedback(_cx, _cy)
+    _drawCrosshair(_cx, _cy)
+
+    -- ESP overlay (throttled)
+    _overlayUpdateCounter = _overlayUpdateCounter + 1
+    if _overlayUpdateCounter >= (_currentFPS < 45 and 2 or 1) then
+        _overlayUpdateCounter = 0
+        _drawOverlays(_targets, _currentAimTarget)
+    end
+
+    -- ── GUI Status Updates ──
+    pcall(function()
+        _Renderer.guiStatus.Text = _Prefs.Enabled and (_assistActive and "AIM" or "ON") or "OFF"
+        _Renderer.guiFPS.Text    = tostring(_currentFPS) .. " fps"
+        _Renderer.guiKills.Text  = _sessionKills .. " kills"
+    end)
+
+    pcall(function()
+        local _ping = math.floor(_PerfMonitor.Network.ServerStatsItem["Data Ping"]:GetValue())
+        _Renderer.guiPing.Text = _ping .. "ms"
+    end)
+
+    -- Target info labels
+    pcall(function()
+        if _currentAimTarget then
+            _guiTargetName.Text = "→ " .. tostring(_currentAimTarget.name)
+            local _hp    = _currentAimTarget.hum and math.floor(_currentAimTarget.hum.Health) or 0
+            local _maxHP = _currentAimTarget.hum and math.floor(_currentAimTarget.hum.MaxHealth) or 0
+            local _dist  = _currentAimTarget.part and _cam and math.floor((_cam.CFrame.Position - _currentAimTarget.part.Position).Magnitude) or 0
+            _guiTargetHP.Text = _hp .. "/" .. _maxHP .. "  " .. _dist .. "m"
+        else
+            _guiTargetName.Text = _Prefs.Enabled and "scanning..." or "off"
+            _guiTargetHP.Text = ""
+        end
+    end)
+
+    -- HUD telemetry
+    if _Prefs.ShowHUD then
+        _Renderer.hudFrame.Visible = true
+        local _lines = {}
+        _lines[#_lines + 1] = "MOON v4.2"
+        _lines[#_lines + 1] = "FPS: " .. _currentFPS
+        pcall(function()
+            _lines[#_lines + 1] = "Ping: " .. math.floor(_PerfMonitor.Network.ServerStatsItem["Data Ping"]:GetValue()) .. "ms"
+        end)
+        _lines[#_lines + 1] = "Aim: "    .. (_Prefs.Enabled and (_assistActive and "LOCK" or "ON") or "OFF")
+        _lines[#_lines + 1] = "ESP: "    .. (_Prefs.ShowESP and "ON" or "OFF")
+        _lines[#_lines + 1] = "Chams: "  .. (_Prefs.ShowChams and "ON" or "OFF")
+        _lines[#_lines + 1] = "Kills: "  .. _sessionKills
+        if _Prefs.BhopEnabled then _lines[#_lines + 1] = "Bhop: ON" end
+        if _Prefs.Triggerbot then _lines[#_lines + 1] = "TrigBot: ON" end
+        if _currentAimTarget then _lines[#_lines + 1] = "Aim: " .. tostring(_currentAimTarget.name) end
+        if _Prefs.AutoOptimize then
+            _lines[#_lines + 1] = "AutoOpt: " .. (_currentFPS < (_Prefs.LowFPSThreshold or 35) and "ACTIVE" or "OK")
+        end
+
+        for _i = 1, _Renderer.HUD_MAX do
+            if _i <= #_lines then
+                _Renderer.hudT[_i].Text    = _lines[_i]
+                _Renderer.hudT[_i].Visible = true
+            else
+                _Renderer.hudT[_i].Visible = false
+            end
+        end
+    else
+        _Renderer.hudFrame.Visible = false
+    end
+
+    -- Active binds display
+    _Renderer.updateActiveBinds(_Prefs, _Palette, _assistActive, false, false, false)
+
+    -- Debug log overlay
+    _drawDiagLog(_Renderer.getVP())
+end)
+table.insert(_allConnections, _mainLoopConn)
+
+-- ═══════════════════════════════════════════════════════
+--  Welcome Notification
+-- ═══════════════════════════════════════════════════════
+
+task.delay(2, function()
+    _Renderer.Notify("MOON", "v4.2 loaded — INSERT to open", 4, _Renderer.getAuroraColor(os.clock()))
+end)
